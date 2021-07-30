@@ -1,0 +1,250 @@
+﻿Country,Code,Preprocessed_Data
+Afghanistan,AF,No
+Åland Islands,AX,No
+Albania,AL,No
+Algeria,DZ,No
+American Samoa,AS,No
+Andorra,AD,No
+Angola,AO,No
+Anguilla,AI,No
+Antarctica,AQ,No
+Antigua and Barbuda,AG,No
+Argentina,AR,No
+Armenia,AM,No
+Aruba,AW,No
+Australia,AU,No
+Austria,AT,No
+Azerbaijan,AZ,No
+Bahrain,BH,No
+Bahamas,BS,No
+Bangladesh,BD,No
+Barbados,BB,No
+Belarus,BY,No
+Belgium,BE,No
+Belize,BZ,No
+Benin,BJ,No
+Bermuda,BM,No
+Bhutan,BT,No
+"Bolivia, Plurinational State of",BO,No
+"Bonaire, Sint Eustatius and Saba",BQ,No
+Bosnia and Herzegovina,BA,No
+Botswana,BW,No
+Bouvet Island,BV,No
+Brazil,BR,No
+British Indian Ocean Territory,IO,No
+Brunei Darussalam,BN,No
+Bulgaria,BG,No
+Burkina Faso,BF,No
+Burundi,BI,No
+Cambodia,KH,No
+Cameroon,CM,No
+Canada,CA,No
+Cape Verde,CV,No
+Cayman Islands,KY,No
+Central African Republic,CF,No
+Chad,TD,No
+Chile,CL,No
+China,CN,No
+Christmas Island,CX,No
+Cocos (Keeling) Islands,CC,No
+Colombia,CO,No
+Comoros,KM,No
+Congo,CG,No
+"Congo, the Democratic Republic of the",CD,No
+Cook Islands,CK,No
+Costa Rica,CR,No
+Côte d'Ivoire,CI,No
+Croatia,HR,No
+Cuba,CU,No
+Curaçao,CW,No
+Cyprus,CY,No
+Czech Republic,CZ,No
+Denmark,DK,No
+Djibouti,DJ,No
+Dominica,DM,No
+Dominican Republic,DO,No
+Ecuador,EC,No
+Egypt,EG,No
+El Salvador,SV,No
+Equatorial Guinea,GQ,No
+Eritrea,ER,No
+Estonia,EE,No
+Ethiopia,ET,No
+Falkland Islands (Malvinas),FK,No
+Faroe Islands,FO,No
+Fiji,FJ,No
+Finland,FI,No
+France,FR,No
+French Guiana,GF,No
+French Polynesia,PF,No
+French Southern Territories,TF,No
+Gabon,GA,No
+Gambia,GM,No
+Georgia,GE,No
+Germany,DE,No
+Ghana,GH,No
+Gibraltar,GI,No
+Greece,GR,No
+Greenland,GL,No
+Grenada,GD,No
+Guadeloupe,GP,No
+Guam,GU,No
+Guatemala,GT,No
+Guernsey,GG,No
+Guinea,GN,No
+Guinea-Bissau,GW,No
+Guyana,GY,No
+Haiti,HT,No
+Heard Island and McDonald Islands,HM,No
+Holy See (Vatican City State),VA,No
+Honduras,HN,No
+Hong Kong,HK,No
+Hungary,HU,No
+Iceland,IS,No
+India,IN,No
+Indonesia,ID,No
+"Iran, Islamic Republic of",IR,No
+Iraq,IQ,No
+Ireland,IE,No
+Isle of Man,IM,No
+Israel,IL,No
+Italy,IT,No
+Jamaica,JM,No
+Japan,JP,No
+Jersey,JE,No
+Jordan,JO,No
+Kazakhstan,KZ,No
+Kenya,KE,No
+Kiribati,KI,No
+"Korea, Democratic People's Republic of",KP,No
+"Korea, Republic of",KR,No
+Kuwait,KW,No
+Kyrgyzstan,KG,No
+Lao People's Democratic Republic,LA,No
+Latvia,LV,No
+Lebanon,LB,No
+Lesotho,LS,Yes
+Liberia,LR,No
+Libya,LY,No
+Liechtenstein,LI,No
+Lithuania,LT,No
+Luxembourg,LU,No
+Macao,MO,No
+"Macedonia, the Former Yugoslav Republic of",MK,No
+Madagascar,MG,No
+Malawi,MW,No
+Malaysia,MY,No
+Maldives,MV,No
+Mali,ML,No
+Malta,MT,No
+Marshall Islands,MH,No
+Martinique,MQ,No
+Mauritania,MR,No
+Mauritius,MU,No
+Mayotte,YT,No
+Mexico,MX,No
+"Micronesia, Federated States of",FM,No
+"Moldova, Republic of",MD,No
+Monaco,MC,No
+Mongolia,MN,No
+Montenegro,ME,No
+Montserrat,MS,No
+Morocco,MA,No
+Mozambique,MZ,No
+Myanmar,MM,No
+Namibia,NA,No
+Nauru,NR,No
+Nepal,NP,No
+Netherlands,NL,No
+New Caledonia,NC,No
+New Zealand,NZ,No
+Nicaragua,NI,No
+Niger,NE,No
+Nigeria,NG,No
+Niue,NU,No
+Norfolk Island,NF,No
+Northern Mariana Islands,MP,No
+Norway,NO,No
+Oman,OM,No
+Pakistan,PK,No
+Palau,PW,No
+"Palestine, State of",PS,No
+Panama,PA,No
+Papua New Guinea,PG,No
+Paraguay,PY,No
+Peru,PE,No
+Philippines,PH,No
+Pitcairn,PN,No
+Poland,PL,No
+Portugal,PT,No
+Puerto Rico,PR,No
+Qatar,QA,No
+Réunion,RE,No
+Romania,RO,No
+Russian Federation,RU,No
+Rwanda,RW,No
+Saint Barthélemy,BL,No
+"Saint Helena, Ascension and Tristan da Cunha",SH,No
+Saint Kitts and Nevis,KN,No
+Saint Lucia,LC,No
+Saint Martin (French part),MF,No
+Saint Pierre and Miquelon,PM,No
+Saint Vincent and the Grenadines,VC,No
+Samoa,WS,No
+San Marino,SM,No
+Sao Tome and Principe,ST,No
+Saudi Arabia,SA,No
+Senegal,SN,No
+Serbia,RS,No
+Seychelles,SC,No
+Sierra Leone,SL,No
+Singapore,SG,No
+Sint Maarten (Dutch part),SX,No
+Slovakia,SK,No
+Slovenia,SI,No
+Solomon Islands,SB,No
+Somalia,SO,No
+South Africa,ZA,No
+South Georgia and the South Sandwich Islands,GS,No
+South Sudan,SS,No
+Spain,ES,No
+Sri Lanka,LK,No
+Sudan,SD,No
+Suriname,SR,No
+Svalbard and Jan Mayen,SJ,No
+Swaziland,SZ,No
+Sweden,SE,No
+Switzerland,CH,No
+Syrian Arab Republic,SY,No
+"Taiwan, Province of China",TW,No
+Tajikistan,TJ,No
+"Tanzania, United Republic of",TZ,No
+Thailand,TH,No
+Timor-Leste,TL,No
+Togo,TG,No
+Tokelau,TK,No
+Tonga,TO,No
+Trinidad and Tobago,TT,No
+Tunisia,TN,No
+Turkey,TR,No
+Turkmenistan,TM,No
+Turks and Caicos Islands,TC,No
+Tuvalu,TV,No
+Uganda,UG,No
+Ukraine,UA,No
+United Arab Emirates,AE,No
+United Kingdom,GB,No
+United States,US,No
+United States Minor Outlying Islands,UM,No
+Uruguay,UY,No
+Uzbekistan,UZ,No
+Vanuatu,VU,No
+"Venezuela, Bolivarian Republic of",VE,No
+Viet Nam,VN,No
+"Virgin Islands, British",VG,No
+"Virgin Islands, U.S.",VI,No
+Wallis and Futuna,WF,No
+Western Sahara,EH,No
+Yemen,YE,No
+Zambia,ZM,No
+Zimbabwe,ZW,No
