@@ -1,7 +1,22 @@
+import os
+import base64
+import io
+import pandas as pd
+import geopandas as gpd
+from shapely.geometry import Polygon
+import numpy as np
+import plotly.graph_objs as go
+from shapely.geometry import Point
+from gisele.functions import *
 from gisele.functions2 import *
-from gisele import MILP_models,process_output
+from gisele import initialization, clustering, processing, collecting, \
+    optimization, results, grid, branches
+import pyutilib.subprocess.GlobalData
+from gisele import QGIS_processing_polygon as qgis_process
+from gisele import Local_area_optimization as LAO
+from gisele import MILP_Input_creation,MILP_models,process_output,grid_routing,Secondary_substations
 import time
-
+import rasterio
 ############# INPUT ELECTRICAL PARAMETERS #############
 
 # parameters for the MV cable that is used
@@ -37,7 +52,7 @@ villages_file = 'Villages_areas.geojson'
 villages_file = 'test_large_village/test_large_village.shp'
 local_database =False
 country  = 'Lesotho'
-case_study='Folder_organization2'
+case_study='lesotho_poster'
 
 final_clus=12
 crs = 22287
@@ -52,11 +67,11 @@ crit_dist = simplify_coef/2
 
 
 if local_database ==False:
-    database= r'C:\Users\alekd\Politecnico di Milano\Silvia Corigliano - Gisele shared\8.Case_Study'
-    cluster_folder = database+'\Lesotho\Villages_areas_3_copy.geojson'
+    database= r'C:\Users\silvi\OneDrive - Politecnico di Milano\Documents\2020-2021\Gisele shared\8.Case_Study'
+    cluster_folder = database+'\Lesotho\Villages_areas_46.geojson'
     #cluster_folder = database + '\Lesotho/test_large_village/test_large_village.shp'
     substations_folder = database+'\Lesotho\con_point.shp'
-    study_area_folder = database + '/' + country + '/Study_area/Study_area_3_villages.shp'
+    study_area_folder = database + '/' + country + '/Study_area/Study_area_big.shp'
 else:
     database =gisele_folder + '/Database'
     cluster_folder = database + '/' + country + '/'+villages_file
@@ -114,55 +129,57 @@ else: # not a new project, just read the files from the local folder
     Substations = gpd.read_file(r'Case studies/' + case_study + '/Input/substations/substations.shp')
 # specific data on the case study
 LV_distance=500 # Maximum length of the LV network.
-ss_data = 'ss_data_Thuso.csv' # folder in which the costs for substations can be found
+ss_data = 'ss_data_evn.csv' # folder in which the costs for substations can be found
 simplify_road_coef_inside = 5 # in meters, used for the routing inside the clusters.
 simplify_road_coef_outside = 30 # in meters, used for creating connections among clusters/substations.
 road_coef = 2
 roads_weight=0.3
 ### USER OPTIONS
-mg_option = False
+mg_option = True
+mg_types =1 #if more than one mg for each cluster needs to be computed, with different reliability levels (needed for multiobjective: mg_types=3)
 multi_objective_option = False
-reliability_option = True
+reliability_option = False
 Roads_option=True # Boolean stating whether we want to use the roads for the steiner tree and dijkstra.
 Rivers_option=False
 n_line_type=1
 run_genetic=False
 
 # parameters for the economical factors
-coe = 150 # euro/MWh of electrical energy supplied
+coe = 10000000 # euro/MWh of electrical energy supplied
 grid_lifetime = 40 #years
 landcover_option='ESACCI'
 
 # NEW - suggest connection points
 '''Create the grid of points'''
 print('1. CREATE A WEIGHTED GRID OF POINTS')
-#df_weighted = qgis_process.create_input_csv(crs,resolution,resolution_population,landcover_option,country,case_study,database,study_area)
-#accepted_road_types = ['living_street', 'pedestrian', 'primary', 'primary_link', 'secondary', 'secondary_link',
+# df_weighted = qgis_process.create_input_csv(crs,resolution,resolution_population,landcover_option,country,case_study,database,study_area)
+# accepted_road_types = ['living_street', 'pedestrian', 'primary', 'primary_link', 'secondary', 'secondary_link',
 #                          'tertiary', 'tertiary_link', 'unclassified','residential']
-#Road_nodes,Road_lines = create_roads_new(gisele_folder, case_study, Clusters,crs, accepted_road_types,resolution,resolution_population)
-#Merge_Roads_GridOfPoints(gisele_folder,case_study)
+# Road_nodes,Road_lines = create_roads_new(gisele_folder, case_study, Clusters,crs, accepted_road_types,resolution,resolution_population)
+# Merge_Roads_GridOfPoints(gisele_folder,case_study)
 ''' CLUSTERING PROCEDURE'''
 '''For each cluster, perform further aglomerative clustering, locate secondary substations and perform MV grid routing'''
 print('2. LOCATE SECONDARY SUBSTATIONS INSIDE THE CLUSTERS.')
 #Secondary_substations.locate_secondary_ss(crs, resolution_population, load_capita, pop_per_household, road_coef,
 #                       Clusters, case_study, LV_distance, ss_data,landcover_option, gisele_folder)
 #start = time.time()
-#LAO.optimize(crs, resolution_population, load_capita, pop_per_household, road_coef, Clusters, case_study, LV_distance,
+# LAO.optimize(crs, resolution_population, load_capita, pop_per_household, road_coef, Clusters, case_study, LV_distance,
 #            ss_data,landcover_option,gisele_folder,roads_weight,run_genetic, max_length_segment,simplify_coef, crit_dist,LV_base_cost)
 #end = time.time()
 #print(end-start)
 print('3. ROUTE THE LV GRID FOR EACH CLUSTER')
-#grid_routing.LV_routing(gisele_folder,case_study,crs,resolution_population,Roads_option,simplify_road_coef_inside,LV_base_cost,roads_weight)
+# grid_routing.LV_routing(gisele_folder,case_study,crs,resolution_population,Roads_option,simplify_road_coef_inside,LV_base_cost,roads_weight)
 print('4. ROUTE THE MV GRID INSIDE THE CLUSTERS.')
-#grid_routing.routing(Clusters,gisele_folder,case_study,crs,resolution,Roads_option,roads_weight,simplify_road_coef_inside,Rivers_option,line_cost)
+# grid_routing.routing(Clusters,gisele_folder,case_study,crs,resolution,Roads_option,roads_weight,simplify_road_coef_inside,Rivers_option,line_cost)
 '''Create the input for the MILP'''
 print('5. Create the input for the MILP.')
-if multi_objective_option:
-    calculate_mg_multiobjective(gisele_folder, case_study, crs)
-elif mg_option:
-    calculate_mg(gisele_folder, case_study, crs)
-#MILP_Input_creation.create_input(gisele_folder,case_study,crs,line_cost,resolution,reliability_option,Roads_option,
-#                          simplify_road_coef_outside, Rivers_option,mg_option)
+# MILP_Input_creation.create_input(gisele_folder,case_study,crs,line_cost,resolution,reliability_option,Roads_option,
+#                          simplify_road_coef_outside, Rivers_option,mg_option,mg_types)
+# if multi_objective_option:
+#     calculate_mg_multiobjective(gisele_folder, case_study, crs)
+# elif mg_option:
+#      calculate_mg(gisele_folder, case_study, crs,mg_types)
+
 
 
 # '''Execute the desired MILP model'''

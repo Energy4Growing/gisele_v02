@@ -153,7 +153,7 @@ def ht_power_max(model,h,ht):
 
 # max power given by resource limits (max flow rate of the river)
 def ht_power_river(model,h,ht):
-    return model.ht_power[h,ht] <= model.input_hydro_res[h]
+    return model.ht_power[h,ht] <= model.input_hydro_res[h,ht]
 
 def ht_power_min(model,h,ht):
     return model.ht_power[h,ht] >= model.ht_nominal_capacity[ht]*model.ht_P_min[ht]*model.ht_units_on[h,ht]

@@ -64,7 +64,7 @@ def start(load_profile, pv_avg, wt_avg,input_michele, ht_avg,n_mg):
             print('Show results')
             result_michele[str(i)]= Load_results(instance)
 
-    return results
+    return result_michele
 
 
 

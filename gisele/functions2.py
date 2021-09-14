@@ -211,11 +211,11 @@ def array_to_LineString(all_points,pts):
     Line = LineString(pts_new)
     return Line
 
-def calculate_mg(gisele_folder,case_study,crs):
+def calculate_mg(gisele_folder,case_study,crs,mg_types):
     case_folder = gisele_folder + '/Case studies/' + case_study
-    data_folder = case_folder + '/Input/MILP/all_data'
+    data_folder = case_folder + '/Intermediate/Optimization/all_data'
     Nodes = pd.read_csv(data_folder + '/All_Nodes.csv')
-    n_clusters = Nodes['Cluster'].max()
+    n_clusters = int(Nodes['Cluster'].max())
     clusters_list = [*range(1,n_clusters+1)]
     cluster_powers = [Nodes.loc[Nodes['Cluster'] == i, 'MV_Power'].sum() for i in range(1,n_clusters+1)]
     cluster_population = [Nodes.loc[Nodes['Cluster'] == i, 'Population'].sum() for i in range(1,n_clusters+1)]
@@ -230,8 +230,8 @@ def calculate_mg(gisele_folder,case_study,crs):
 
     yearly_profile, years, total_energy = load(clusters_list,
                                                grid_lifetime,
-                                               input_profile)
-    mg = sizing(yearly_profile, clusters_list, Nodes_gdf, wt,n_mg=n_clusters)
+                                               input_profile, gisele_folder, case_study)
+    mg = sizing(yearly_profile, clusters_list, Nodes_gdf, wt,mg_types,gisele_folder,case_study)
 
     mg.to_csv(case_folder+'/Output/Microgrid.csv')
 

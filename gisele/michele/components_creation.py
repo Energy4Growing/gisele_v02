@@ -85,13 +85,13 @@ def Model_Creation(model, input_load, wt_prod, pv_prod,input_michele):
     model.dg_repl_cost = Param(model.dg, initialize=Initialize_dg_repl_cost)  # unitary replacement dg cost [€/h ON]
 
     # Parameters of the Hydro Turbine
-    #model.ht_nominal_capacity = Param(model.ht)  # Nominal capacity of the HT in kW/unit
-    #model.ht_investment_cost = Param(model.ht)  # Cost of HT in €/unit
-    #model.ht_OM_cost = Param(model.ht)  # Cost of O&M HT in €/unit/y
-    #model.ht_max_units = Param(model.ht)  # Maximum number of installed units [-]
-    #model.ht_life = Param(model.ht)  # Lifetime of HT [y]
-    #model.ht_P_min = Param(model.ht)  # Minimum power of HT (related to min flow rate) [0-1]
-    #model.ht_efficiency = Param(model.ht)  # Constant efficiency of HT [0-1]
+    model.ht_nominal_capacity = Param(model.ht)  # Nominal capacity of the HT in kW/unit
+    model.ht_investment_cost = Param(model.ht)  # Cost of HT in €/unit
+    model.ht_OM_cost = Param(model.ht)  # Cost of O&M HT in €/unit/y
+    model.ht_max_units = Param(model.ht)  # Maximum number of installed units [-]
+    model.ht_life = Param(model.ht)  # Lifetime of HT [y]
+    model.ht_P_min = Param(model.ht)  # Minimum power of HT (related to min flow rate) [0-1]
+    model.ht_efficiency = Param(model.ht)  # Constant efficiency of HT [0-1]
 
     # Scalars
     model.inflation_rate = Param()  # inflation rate [0-1]
@@ -116,7 +116,7 @@ def Model_Creation(model, input_load, wt_prod, pv_prod,input_michele):
     model.input_load = Param(model.hours, initialize=Initialize_load)  # hourly load profile [kWh]
     model.input_pv_prod = Param(model.hours, model.pv, initialize=Initialize_pv_prod)  # hourly PV production [kWh]
     model.input_wt_prod = Param(model.hours, model.wt, initialize=Initialize_wt_prod)  # hourly WT production [kWh]
-    #model.input_hydro_res = Param(model.hours, initialize=Initialize_hydro_res)  # hourly HT production [kWh]
+    model.input_hydro_res = Param(model.hours,model.ht, initialize=Initialize_hydro_res)  # hourly HT production [kWh]
 
     #VARIABLES
 
@@ -146,9 +146,9 @@ def Model_Creation(model, input_load, wt_prod, pv_prod,input_michele):
     model.dg_units_on = Var(model.hours,model.dg, within=NonNegativeIntegers)  # number of active DG in h
 
     # Variables associated to the hydro turbine
-    #model.ht_units = Var(model.ht,within=NonNegativeIntegers) # Number of installed units of hydro turbine
-    #model.ht_power = Var(model.hours, model.ht, within=NonNegativeReals) #Power provided by HT [kWh]
-    #model.ht_units_on = Var(model.hours,model.ht, within=NonNegativeIntegers) #number of active HT in h
+    model.ht_units = Var(model.ht,within=NonNegativeIntegers) # Number of installed units of hydro turbine
+    model.ht_power = Var(model.hours, model.ht, within=NonNegativeReals) #Power provided by HT [kWh]
+    model.ht_units_on = Var(model.hours,model.ht, within=NonNegativeIntegers) #number of active HT in h
 
    # Variables associated to the energy balance
     model.Load = Var(model.hours, within=NonNegativeReals)
@@ -172,10 +172,10 @@ def Model_Creation(model, input_load, wt_prod, pv_prod,input_michele):
     model.TotalSalvageValue = Constraint(rule=total_salvage_value)
     # to design the system
     model.TotalLoad = Constraint(model.hours, rule=total_load)
-    # model.PvInstalled = Constraint(model.pv, rule=pv_installed)
-    # model.WtInstalled = Constraint(model.wt, rule=wt_installed)
-    # model.BessInstalled = Constraint(model.bess, rule=bess_installed)
-    # model.DgInstalled = Constraint(model.dg, rule=dg_installed)
+    model.PvInstalled = Constraint(model.pv, rule=pv_installed)
+    model.WtInstalled = Constraint(model.wt, rule=wt_installed)
+    model.BessInstalled = Constraint(model.bess, rule=bess_installed)
+    model.DgInstalled = Constraint(model.dg, rule=dg_installed)
     model.ResEnergy = Constraint(model.hours, rule=res_energy)
     model.SystemBalance = Constraint(model.hours, rule=system_balance)
     model.TotalEnergyReq = Constraint(model.hours, rule=total_energy_req)
@@ -190,10 +190,10 @@ def Model_Creation(model, input_load, wt_prod, pv_prod,input_michele):
     model.DgPowerMin = Constraint(model.hours, model.dg, rule=dg_power_min)
     model.DgOnline = Constraint(model.hours, model.dg, rule=dg_online)
     # constraints related to hydro turbine
-    #model.HtPowerMax = Constraint(model.hours, model.ht, rule=ht_power_max)
-    #model.HtPowerRiver = Constraint(model.hours, model.ht, rule=ht_power_river)
-    #model.HtPowerMin = Constraint(model.hours, model.ht, rule=ht_power_min)
-    #model.HtOnline = Constraint(model.hours, model.ht, rule=ht_online)
+    model.HtPowerMax = Constraint(model.hours, model.ht, rule=ht_power_max)
+    model.HtPowerRiver = Constraint(model.hours, model.ht, rule=ht_power_river)
+    model.HtPowerMin = Constraint(model.hours, model.ht, rule=ht_power_min)
+    model.HtOnline = Constraint(model.hours, model.ht, rule=ht_online)
     # constraints related to batteries
     model.BatteryPowerMax = Constraint(model.hours,model.bess, rule=battery_power_max)
     model.BessCondition1 = Constraint(model.hours, model.bess, rule=bess_condition1)

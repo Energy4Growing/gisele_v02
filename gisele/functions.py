@@ -454,7 +454,7 @@ def edges_to_line(path, df, edges_matrix):
     return line, line_points
 
 
-def load(clusters_list, grid_lifetime, input_profile):
+def load(clusters_list, grid_lifetime, input_profile,gisele_folder, case_study):
     """
     Reads the input daily load profile from the input csv. Reads the number of
     years of the project and the demand growth from the data.dat file of
@@ -470,9 +470,10 @@ def load(clusters_list, grid_lifetime, input_profile):
     l()
     print("5. Microgrid Sizing")
     l()
-    data_michele = pd.read_table("gisele/michele/Inputs/data.dat", sep="=",
+    case_folder = gisele_folder + '/Case studies/' + case_study
+
+    data_michele = pd.read_table(gisele_folder+"/gisele/michele/Inputs/data.dat", sep="=",
                                  header=None)
-    os.chdir(r'Input//')
     print("Creating load profile for each cluster..")
     daily_profile = pd.DataFrame(index=range(1, 25),
                                  columns=clusters_list.Cluster)
@@ -503,9 +504,8 @@ def load(clusters_list, grid_lifetime, input_profile):
     for cluster in clusters_list.Cluster:
         total_energy.loc[cluster, 'Energy'] = \
             grid_energy.loc[:, cluster].sum().round(2)
-    os.chdir('../..')
     print("Load profile created")
-    total_energy.to_csv(r'Output/Microgrids/Grid_energy.csv')
+    total_energy.to_csv(case_folder +'/Intermediate/Microgrid/Grid_energy.csv')
     return load_profile, years, total_energy
 
 
@@ -528,7 +528,7 @@ def shift_timezone(df, shift):
     return df
 
 
-def sizing(load_profile, clusters_list, geo_df_clustered, wt, n_mg):
+def sizing(load_profile, clusters_list, geo_df_clustered, wt, mg_types, gisele_folder,case_study):
     """
     Imports the solar and wind production from the RenewablesNinja api and then
     Runs the optimization algorithm MicHEle to find the best microgrid
@@ -537,9 +537,12 @@ def sizing(load_profile, clusters_list, geo_df_clustered, wt, n_mg):
     :param clusters_list: List of clusters ID numbers
     :param geo_df_clustered: Point geodataframe with Cluster identification
     :param wt: Wind turbine model used for computing the wind velocity
-    :param years: Number of years the microgrid will operate (project lifetime)
+    :param mg_types: number of times to evaluate microgrids in each cluster.
+                renewables fraction in michele changes accordingly
     :return mg: Dataframe containing the information of the Clusters' microgrid
     """
+
+    case_folder = gisele_folder + '/Case studies/' + case_study
     geo_df_clustered = geo_df_clustered.to_crs(4326)
     mg = {}
     # mg = pd.DataFrame(index=clusters_list.index,
@@ -552,7 +555,7 @@ def sizing(load_profile, clusters_list, geo_df_clustered, wt, n_mg):
     #                            'LCOE [EUR/kWh]','CO2 [kg]', 'Unavailability [MWh/y]'],
     #                   dtype=float)
 
-    for i in range(n_mg):
+    for i in range(mg_types):
         mg[i] = pd.DataFrame(index=clusters_list.index,
                           columns=['Cluster','Renewable fraction index', 'PV [kW]', 'Wind [kW]', 'Diesel [kW]',
                                    'BESS [kWh]', 'Inverter [kW]',
@@ -563,97 +566,97 @@ def sizing(load_profile, clusters_list, geo_df_clustered, wt, n_mg):
                           dtype=float)
 
     #save useful values from michele input data
-    with open('michele/Inputs/data.json') as f:
+    with open(gisele_folder+'/gisele/michele/Inputs/data.json') as f:
         input_michele = json.load(f)
     proj_lifetime = input_michele['num_years']
     num_typ_days = input_michele['num_days']
 
     for cluster_n in clusters_list.Cluster:
-        try:
-          l()
-          print('Creating the optimal Microgrid for Cluster ' + str(cluster_n))
-          l()
-          load_profile_cluster = load_profile.loc[:, cluster_n]
-          lat = geo_df_clustered[geo_df_clustered['Cluster']
-                                 == cluster_n].geometry.y.values[0]
-          lon = geo_df_clustered[geo_df_clustered['Cluster']
-                                 == cluster_n].geometry.x.values[0]
-          all_angles = pd.read_csv('Input/TiltAngles.csv')
-          tilt_angle = abs(all_angles.loc[abs(all_angles['lat'] - lat).idxmin(),
-                                          'opt_tilt'])
-          pv_prod = import_pv_data(lat, lon, tilt_angle)
-          wt_prod = import_wind_data(lat, lon, wt)
-          utc = pv_prod.local_time[0]
-          if type(utc) is pd.Timestamp:
-              time_shift = utc.hour
-          else:
-              utc = iso8601.parse_date(utc)
-              time_shift = int(utc.tzinfo.tzname(utc).split(':')[0])
-          div_round = 8760 // (num_typ_days * 24)
-          length = num_typ_days * 24
-          new_length= length *div_round
-          # pv_avg = pv_prod.groupby([pv_prod.index.month,
-          #                           pv_prod.index.hour]).mean()
+        # try:
+        l()
+        print('Creating the optimal Microgrid for Cluster ' + str(cluster_n))
+        l()
+        load_profile_cluster = load_profile.loc[:, cluster_n]
+        lat = geo_df_clustered[geo_df_clustered['Cluster']
+                             == cluster_n].geometry.y.values[0]
+        lon = geo_df_clustered[geo_df_clustered['Cluster']
+                             == cluster_n].geometry.x.values[0]
+        all_angles = pd.read_csv(gisele_folder+'/general_input/TiltAngles.csv')
+        tilt_angle = abs(all_angles.loc[abs(all_angles['lat'] - lat).idxmin(),
+                                      'opt_tilt'])
+        pv_prod = import_pv_data(lat, lon, tilt_angle)
+        wt_prod = import_wind_data(lat, lon, wt)
+        utc = pv_prod.local_time[0]
+        if type(utc) is pd.Timestamp:
+          time_shift = utc.hour
+        else:
+          utc = iso8601.parse_date(utc)
+          time_shift = int(utc.tzinfo.tzname(utc).split(':')[0])
+        div_round = 8760 // (num_typ_days * 24)
+        length = num_typ_days * 24
+        new_length= length *div_round
+        # pv_avg = pv_prod.groupby([pv_prod.index.month,
+        #                           pv_prod.index.hour]).mean()
 
-          pv_avg_new=np.zeros(24*num_typ_days)
-          pv_avg = pv_prod.values[0:new_length,1].reshape(24,div_round*num_typ_days,order='F')
-          wt_avg_new = np.zeros(24 * num_typ_days)
-          wt_avg = wt_prod.values[0:new_length].reshape(24,
-                                                           div_round * num_typ_days,
-                                                           order='F')
-          for i in range(num_typ_days):
-              pv_avg_new[i*24:(i+1)*24] = pv_avg[:,div_round*i:div_round*(i+1)].mean(axis=1)
+        pv_avg_new=np.zeros(24*num_typ_days)
+        pv_avg = pv_prod.values[0:new_length,1].reshape(24,div_round*num_typ_days,order='F')
+        wt_avg_new = np.zeros(24 * num_typ_days)
+        wt_avg = wt_prod.values[0:new_length].reshape(24,
+                                                       div_round * num_typ_days,
+                                                       order='F')
+        for i in range(num_typ_days):
+          pv_avg_new[i*24:(i+1)*24] = pv_avg[:,div_round*i:div_round*(i+1)].mean(axis=1)
 
-              wt_avg_new[i * 24:(i + 1) * 24] = wt_avg[:, div_round * i:div_round * (
-                      i + 1)].mean(axis=1)
-
-
-
-          pv_avg = pd.DataFrame(pv_avg_new)
-          pv_avg = pv_avg.append([pv_avg] * (proj_lifetime - 1), ignore_index=True)
-          pv_avg.reset_index(drop=True, inplace=True)
-          pv_avg = shift_timezone(pv_avg, time_shift)
+          wt_avg_new[i * 24:(i + 1) * 24] = wt_avg[:, div_round * i:div_round * (
+                  i + 1)].mean(axis=1)
 
 
-          # wt_prod = import_wind_data(lat, lon, wt)
-          # wt_avg = wt_prod.groupby([wt_prod.index.month,
-          #                           wt_prod.index.hour]).mean()
-          wt_avg = pd.DataFrame(wt_avg_new)
-          wt_avg = wt_avg.append([wt_avg] * (proj_lifetime - 1), ignore_index=True)
-          wt_avg.reset_index(drop=True, inplace=True)
-          wt_avg = shift_timezone(wt_avg, time_shift)
 
-          #todo ->implement hydro resource, for the moment creation of a fake input
-          ht_avg = wt_avg
+        pv_avg = pd.DataFrame(pv_avg_new)
+        pv_avg = pv_avg.append([pv_avg] * (proj_lifetime - 1), ignore_index=True)
+        pv_avg.reset_index(drop=True, inplace=True)
+        pv_avg = shift_timezone(pv_avg, time_shift)
 
-          results = start(load_profile_cluster, pv_avg, wt_avg,input_michele, ht_avg, n_mg)
 
-          for i in range(n_mg):
-              mg[i].loc[cluster_n, 'Cluster'] = 'C' + str(cluster_n)
-              mg[i].loc[cluster_n, 'Renewable fraction index'] = str(i)
-              mg[i].loc[cluster_n, 'PV [kW]'] = results[str(i)]['inst_pv']
-              mg[i].loc[cluster_n, 'Wind [kW]'] = results[str(i)]['inst_wind']
-              mg[i].loc[cluster_n, 'Diesel [kW]'] = results[str(i)]['inst_dg']
-              mg[i].loc[cluster_n, 'BESS [kWh]'] = results[str(i)]['inst_bess']
-              mg[i].loc[cluster_n, 'Inverter [kW]'] = results[str(i)]['inst_inv']
-              mg[i].loc[cluster_n, 'Investment Cost [kEUR]'] = results[str(i)]['init_cost']
-              mg[i].loc[cluster_n, 'OM Cost [kEUR]'] = results[str(i)]['om_cost']
-              mg[i].loc[cluster_n, 'Replace Cost [kEUR]'] = results[str(i)]['rep_cost']
-              mg[i].loc[cluster_n, 'Total Cost [kEUR]'] = results[str(i)]['npc']
-              mg[i].loc[cluster_n, 'Energy Produced [MWh]'] = results[str(i)]['gen_energy']
-              mg[i].loc[cluster_n, 'Energy Demand [MWh]'] = results[str(i)]['load_energy']
-              mg[i].loc[cluster_n, 'LCOE [EUR/kWh]'] = results[str(i)]['npc'] / \
-                                                       results[str(i)]['gen_energy']
-              mg[i].loc[cluster_n, 'CO2 [kg]'] = results[str(i)]['emissions']
-              mg[i].loc[cluster_n, 'Unavailability [MWh/y]'] = results[str(i)]['tot_unav']
-              print(mg)
-        except:
-          print('Region too large to compute the optimal microgrid.')
+        # wt_prod = import_wind_data(lat, lon, wt)
+        # wt_avg = wt_prod.groupby([wt_prod.index.month,
+        #                           wt_prod.index.hour]).mean()
+        wt_avg = pd.DataFrame(wt_avg_new)
+        wt_avg = wt_avg.append([wt_avg] * (proj_lifetime - 1), ignore_index=True)
+        wt_avg.reset_index(drop=True, inplace=True)
+        wt_avg = shift_timezone(wt_avg, time_shift)
+
+        #todo ->implement hydro resource, for the moment creation of a fake input
+        ht_avg = wt_avg
+
+        results = start(load_profile_cluster, pv_avg, wt_avg,input_michele, ht_avg, mg_types)
+
+        for i in range(mg_types):
+          mg[i].loc[cluster_n, 'Cluster'] = 'C' + str(cluster_n)
+          mg[i].loc[cluster_n, 'Renewable fraction index'] = str(i)
+          mg[i].loc[cluster_n, 'PV [kW]'] = results[str(i)]['inst_pv']
+          mg[i].loc[cluster_n, 'Wind [kW]'] = results[str(i)]['inst_wind']
+          mg[i].loc[cluster_n, 'Diesel [kW]'] = results[str(i)]['inst_dg']
+          mg[i].loc[cluster_n, 'BESS [kWh]'] = results[str(i)]['inst_bess']
+          mg[i].loc[cluster_n, 'Inverter [kW]'] = results[str(i)]['inst_inv']
+          mg[i].loc[cluster_n, 'Investment Cost [kEUR]'] = results[str(i)]['init_cost']
+          mg[i].loc[cluster_n, 'OM Cost [kEUR]'] = results[str(i)]['om_cost']
+          mg[i].loc[cluster_n, 'Replace Cost [kEUR]'] = results[str(i)]['rep_cost']
+          mg[i].loc[cluster_n, 'Total Cost [kEUR]'] = results[str(i)]['npc']
+          mg[i].loc[cluster_n, 'Energy Produced [MWh]'] = results[str(i)]['gen_energy']
+          mg[i].loc[cluster_n, 'Energy Demand [MWh]'] = results[str(i)]['load_energy']
+          mg[i].loc[cluster_n, 'LCOE [EUR/kWh]'] = results[str(i)]['npc'] / \
+                                                   results[str(i)]['gen_energy']
+          mg[i].loc[cluster_n, 'CO2 [kg]'] = results[str(i)]['emissions']
+          mg[i].loc[cluster_n, 'Unavailability [MWh/y]'] = results[str(i)]['tot_unav']
+          print(mg)
+        # except:
+        #   print('Region too large to compute the optimal microgrid.')
 
     microgrid = pd.DataFrame()
-    for i in range(n_mg):
+    for i in range(mg_types):
         microgrid = microgrid.append(mg[i].round(decimals=4))
-    microgrid.to_csv('Output/Microgrids/microgrids.csv', index=False)
+    microgrid.to_csv(case_folder+'/Intermediate/Microgrid/microgrids.csv', index=False)
 
     return microgrid
 

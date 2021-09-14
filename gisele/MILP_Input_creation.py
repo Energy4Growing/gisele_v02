@@ -386,12 +386,14 @@ def create_MILP_input_1way(all_points,gisele_folder,case_study,line_bc,resolutio
     # Write files about the PS
     Primary_substations[['ID','Power']].to_csv(MILP_input_folder +'/PS_power_max.csv',index=False)
     Primary_substations[['ID', 'Cost']].to_csv(MILP_input_folder + '/PS_costs.csv', index=False)
+    Primary_substations[['ID', 'Voltage']].to_csv(
+        MILP_input_folder + '/PS_voltage.csv', index=False)
     # Write files about the MGs
     mg_powers = [Nodes.loc[Nodes['Cluster']== i,'MV_Power'].sum() for i in range(n_clusters)]
     pd.DataFrame({'ID': microgrid_nodes}).to_csv(MILP_input_folder + '/microgrids_nodes.csv', index=False)
     pd.DataFrame({'ID': microgrid_nodes,'power':mg_powers}).to_csv(MILP_input_folder +'/microgrids_powers.csv',index=False)
-    pd.DataFrame({'ID': microgrid_nodes,'energy': Microgrids.loc[:,'Energy Consumed [MWh]']}).to_csv(MILP_input_folder +'/energy.csv',index=False)
-    pd.DataFrame({'ID': microgrid_nodes, 'Cost': Microgrids.loc[:,'Total Cost [k€]']}).to_csv(MILP_input_folder +'/microgrids_costs.csv',index=False)
+    pd.DataFrame({'ID': microgrid_nodes,'energy': Microgrids.loc[:,'Energy Demand [MWh]']}).to_csv(MILP_input_folder +'/energy.csv',index=False)
+    pd.DataFrame({'ID': microgrid_nodes, 'Cost': Microgrids.loc[:,'Total Cost [kEUR]']}).to_csv(MILP_input_folder +'/microgrids_costs.csv',index=False)
 
 
     #Start processing lines
@@ -402,7 +404,7 @@ def create_MILP_input_1way(all_points,gisele_folder,case_study,line_bc,resolutio
     #Links decision - here we also add the "Fake" microgrid points
     for i in range(n_clusters):
         node_mg = microgrid_nodes[i]
-        node_cluster = Nodes.loc[Nodes['Cluster']==i,'ID'].values[0]
+        node_cluster = Nodes.loc[Nodes['Cluster']==i+1,'ID'].values[0]
         Data = {'ID1':[node_mg],'ID2': [node_cluster], 'Cost': [0],'Length': [1],'Type':'MG'}
         Lines_connections=Lines_connections.append(pd.DataFrame(Data))
 
@@ -449,7 +451,7 @@ def add_PS_to_grid_of_points(all_points,Primary_substations,next_ID,add_elevatio
         all_points = all_points.append(gpd.GeoDataFrame(Data))
         next_ID+=1
     return all_points
-def create_input(gisele_folder,case_study,crs,line_bc,resolution,reliability_option,Roads_option,tolerance_outside,Rivers_option,mg_option):
+def create_input(gisele_folder,case_study,crs,line_bc,resolution,reliability_option,Roads_option,tolerance_outside,Rivers_option,mg_option,mg_types):
 
     crs_str = "EPSG:"+str(crs)
     case_folder = gisele_folder+'/Case studies/'+case_study
@@ -498,8 +500,8 @@ def create_input(gisele_folder,case_study,crs,line_bc,resolution,reliability_opt
     create_connections(all_points_withPS,Primary_substations,gisele_folder,case_study,line_bc,resolution,crs,Roads_option,tolerance_outside,Rivers_option)
     #calculate_NPC = blablabla
     #calculate_NPC.to_csv
-    #if mg_option:
-    #    calculate_mg(gisele_folder, case_study, crs)
+    if mg_option:
+        calculate_mg(gisele_folder, case_study, crs,mg_types)
     if reliability_option:
         create_MILP_input(all_points_withPS,gisele_folder,case_study,line_bc,resolution,crs,mg_option) # all the lines are from i-j and j-i, only positive powers to consider reliability
     else:

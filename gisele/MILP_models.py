@@ -443,7 +443,6 @@ def MILP_MG_reliability(gisele_folder,case_study,n_clusters,coe,voltage,resistan
     model.cf = Param()
     model.cPS = Param()
     model.E_min = Param()
-    model.E_max = Param()
     model.PPS_max = Param()
     model.PPS_min = Param()
 
@@ -568,11 +567,6 @@ def MILP_MG_reliability(gisele_folder,case_study,n_clusters,coe,voltage,resistan
         return model.E[i] >= model.z[i] * (1 - model.E_min) + model.E_min
 
     model.Voltage_limit_MG2 = Constraint(model.N_MG, rule=Voltage_limit_MG2)
-
-    def Voltage_limit_clusters(model, i):
-        return model.E[i] <= model.E_max
-
-    model.Voltage_limit_clusters = Constraint(model.N_clusters, rule=Voltage_limit_clusters)
 
     def Voltage_limit_clusters2(model, i):
         return model.E[i] >= model.E_min
@@ -1451,10 +1445,6 @@ def MILP_MG_noRel(gisele_folder,case_study,n_clusters,coe,voltage,resistance,rea
 
     model.Voltage_limit_MG2 = Constraint(model.N_MG, rule=Voltage_limit_MG2)
 
-    def Voltage_limit_clusters(model, i):
-        return model.E[i] <= model.E_max
-
-    model.Voltage_limit_clusters = Constraint(model.N_clusters, rule=Voltage_limit_clusters)
 
     def Voltage_limit_clusters2(model, i):
         return model.E[i] >= model.E_min
@@ -1478,10 +1468,10 @@ def MILP_MG_noRel(gisele_folder,case_study,n_clusters,coe,voltage,resistance,rea
     model.MG_power_limit = Constraint(model.N_MG, rule=MG_power_limit)
 
     ####################Define objective function##########################
-
+    print(coe)
     def ObjectiveFunction(model):
-        # return summation(model.weights, model.x)+ summation(model.mg_cost,model.z)*1000
-        return summation(model.weights, model.x) * model.cf / 10000 + summation(model.mg_cost, model.z) * 1000 + \
+        # model.weights is in euro, model.coe is euro/MWh,
+        return summation(model.weights, model.x)  + summation(model.mg_cost, model.z) * 1000 + \
                sum(model.energy[i] * (1 - model.z[i]) for i in model.N_MG) * model.coe + summation(model.ps_cost,
                                                                                                    model.k)
         # +sum((model.P[i]/model.A_ref)**2*0.5*1.25*model.R_ref/model.Z_ref*model.dist[i]/1000*24*365*20 for i in model.links)
@@ -1496,9 +1486,9 @@ def MILP_MG_noRel(gisele_folder,case_study,n_clusters,coe,voltage,resistance,rea
     # opt = SolverFactory('cbc',executable=r'C:\Users\Asus\Desktop\POLIMI\Thesis\GISELE\Gisele_MILP\cbc')
     opt = SolverFactory('gurobi')
     # opt.options['numericfocus']=0
-    # opt.options['mipgap'] = 0.0002
-    # opt.options['presolve']=2
-    opt.options['mipfocus'] = 3
+    opt.options['mipgap'] = 0.02
+    opt.options['presolve']=2
+    # opt.options['mipfocus'] = 3
     print('Starting optimization process')
     time_i = datetime.now()
     opt.solve(instance, tee=True, symbolic_solver_labels=True)
@@ -1839,10 +1829,6 @@ def MILP_MG_2cables(gisele_folder,case_study,n_clusters,coe,voltage,resistance,r
 
     model.Voltage_limit_MG2 = Constraint(model.N_MG, rule=Voltage_limit_MG2)
 
-    def Voltage_limit_clusters(model, i):
-        return model.E[i] <= model.E_max
-
-    model.Voltage_limit_clusters = Constraint(model.N_clusters, rule=Voltage_limit_clusters)
 
     def Voltage_limit_clusters2(model, i):
         return model.E[i] >= model.E_min
@@ -1888,7 +1874,7 @@ def MILP_MG_2cables(gisele_folder,case_study,n_clusters,coe,voltage,resistance,r
     # opt = SolverFactory('cbc',executable=r'C:\Users\Asus\Desktop\POLIMI\Thesis\GISELE\Gisele_MILP\cbc')
     opt = SolverFactory('gurobi')
     # opt.options['numericfocus']=0
-    opt.options['mipgap'] = 0.005
+    opt.options['mipgap'] = 0.01
     opt.options['presolve'] = 2
     # opt.options['mipfocus']=2
     # opt = SolverFactory('cbc',executable=r'C:\Users\Asus\Desktop\POLIMI\Thesis\GISELE\New folder\cbc')
