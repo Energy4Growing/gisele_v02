@@ -311,6 +311,7 @@ def create_MILP_input(all_points,gisele_folder,case_study,line_bc,resolution,crs
     # Write files about the MGs
     if mg_option:
         mg_powers = [Nodes.loc[Nodes['Cluster']== i,'MV_Power'].sum() for i in range(n_clusters)]
+        #add some rounding here
         pd.DataFrame({'ID': microgrid_nodes}).to_csv(MILP_input_folder + '/microgrids_nodes.csv', index=False)
         pd.DataFrame({'ID': microgrid_nodes,'power':mg_powers}).to_csv(MILP_input_folder +'/microgrids_powers.csv',index=False)
         pd.DataFrame({'ID': microgrid_nodes,'energy': Microgrids.loc[:,'Energy Consumed [MWh]']}).to_csv(MILP_input_folder +'/energy.csv',index=False)
@@ -410,7 +411,8 @@ def create_MILP_input_1way(all_points,gisele_folder,case_study,line_bc,resolutio
 
     Lines_connections[['ID1','ID2']].to_csv(MILP_input_folder + '/links_decision.csv', index=False)
     Lines_connections[['ID1', 'ID2','Cost']].to_csv(MILP_input_folder + '/weights_decision_lines.csv', index=False)
-
+    #TODO calculation of Cost_npv
+    #Lines_connections[['ID1', 'ID2', 'Cost_npv']].to_csv(MILP_input_folder + '/weights_decision_lines_npv.csv', index=False)
     All_lines = Lines_clusters.copy()
     All_lines = All_lines.append(Lines_connections)
     All_lines[['ID1','ID2']].to_csv(MILP_input_folder + '/links_all.csv', index=False)

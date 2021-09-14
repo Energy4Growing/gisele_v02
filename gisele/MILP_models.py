@@ -1295,10 +1295,10 @@ def MILP_MG_noRel(gisele_folder,case_study,n_clusters,coe,voltage,resistance,rea
 
     model.energy = Param(model.N_MG)
     data.load(filename='energy.csv', param=model.energy)
-
+    # TODO also calculate npv
     model.mg_cost = Param(model.N_MG)
     data.load(filename='microgrids_costs.csv', param=model.mg_cost)
-
+    # TODO also calculate npv
     model.ps_cost = Param(model.N_PS)
     data.load(filename='PS_costs.csv', param=model.ps_cost)
 
@@ -1316,9 +1316,9 @@ def MILP_MG_noRel(gisele_folder,case_study,n_clusters,coe,voltage,resistance,rea
     # Connection distance of all the edges
     model.dist = Param(model.links)
     data.load(filename='distances.csv', param=model.dist)
-
+    #TODO use the npv cost of the lines
     model.weights = Param(model.links_decision)
-    data.load(filename='weights_decision_lines.csv', param=model.weights)
+    data.load(filename='weights_decision_lines_npv.csv', param=model.weights)
 
     # Electrical parameters of all the cables
     model.V_ref = Param(initialize=voltage)
