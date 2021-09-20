@@ -570,9 +570,10 @@ def sizing(load_profile, clusters_list, geo_df_clustered, wt, mg_types, gisele_f
         input_michele = json.load(f)
     proj_lifetime = input_michele['num_years']
     num_typ_days = input_michele['num_days']
-
-    for cluster_n in clusters_list.Cluster:
+    clusters = clusters_list.Cluster
+    for index in range(len(clusters)): # fix because the Clusters are starting from 1 instead of 0
         # try:
+        cluster_n = clusters[index]
         l()
         print('Creating the optimal Microgrid for Cluster ' + str(cluster_n))
         l()
@@ -632,23 +633,23 @@ def sizing(load_profile, clusters_list, geo_df_clustered, wt, mg_types, gisele_f
         results = start(load_profile_cluster, pv_avg, wt_avg,input_michele, ht_avg, mg_types)
 
         for i in range(mg_types):
-          mg[i].loc[cluster_n, 'Cluster'] = 'C' + str(cluster_n)
-          mg[i].loc[cluster_n, 'Renewable fraction index'] = str(i)
-          mg[i].loc[cluster_n, 'PV [kW]'] = results[str(i)]['inst_pv']
-          mg[i].loc[cluster_n, 'Wind [kW]'] = results[str(i)]['inst_wind']
-          mg[i].loc[cluster_n, 'Diesel [kW]'] = results[str(i)]['inst_dg']
-          mg[i].loc[cluster_n, 'BESS [kWh]'] = results[str(i)]['inst_bess']
-          mg[i].loc[cluster_n, 'Inverter [kW]'] = results[str(i)]['inst_inv']
-          mg[i].loc[cluster_n, 'Investment Cost [kEUR]'] = results[str(i)]['init_cost']
-          mg[i].loc[cluster_n, 'OM Cost [kEUR]'] = results[str(i)]['om_cost']
-          mg[i].loc[cluster_n, 'Replace Cost [kEUR]'] = results[str(i)]['rep_cost']
-          mg[i].loc[cluster_n, 'Total Cost [kEUR]'] = results[str(i)]['npc']
-          mg[i].loc[cluster_n, 'Energy Produced [MWh]'] = results[str(i)]['gen_energy']
-          mg[i].loc[cluster_n, 'Energy Demand [MWh]'] = results[str(i)]['load_energy']
-          mg[i].loc[cluster_n, 'LCOE [EUR/kWh]'] = results[str(i)]['npc'] / \
+          mg[i].loc[index, 'Cluster'] = 'C' + str(cluster_n)
+          mg[i].loc[index, 'Renewable fraction index'] = str(i)
+          mg[i].loc[index, 'PV [kW]'] = results[str(i)]['inst_pv']
+          mg[i].loc[index, 'Wind [kW]'] = results[str(i)]['inst_wind']
+          mg[i].loc[index, 'Diesel [kW]'] = results[str(i)]['inst_dg']
+          mg[i].loc[index, 'BESS [kWh]'] = results[str(i)]['inst_bess']
+          mg[i].loc[index, 'Inverter [kW]'] = results[str(i)]['inst_inv']
+          mg[i].loc[index, 'Investment Cost [kEUR]'] = results[str(i)]['init_cost']
+          mg[i].loc[index, 'OM Cost [kEUR]'] = results[str(i)]['om_cost']
+          mg[i].loc[index, 'Replace Cost [kEUR]'] = results[str(i)]['rep_cost']
+          mg[i].loc[index, 'Total Cost [kEUR]'] = results[str(i)]['npc']
+          mg[i].loc[index, 'Energy Produced [MWh]'] = results[str(i)]['gen_energy']
+          mg[i].loc[index, 'Energy Demand [MWh]'] = results[str(i)]['load_energy']
+          mg[i].loc[index, 'LCOE [EUR/kWh]'] = results[str(i)]['npc'] / \
                                                    results[str(i)]['gen_energy']
-          mg[i].loc[cluster_n, 'CO2 [kg]'] = results[str(i)]['emissions']
-          mg[i].loc[cluster_n, 'Unavailability [MWh/y]'] = results[str(i)]['tot_unav']
+          mg[i].loc[index, 'CO2 [kg]'] = results[str(i)]['emissions']
+          mg[i].loc[index, 'Unavailability [MWh/y]'] = results[str(i)]['tot_unav']
           print(mg)
         # except:
         #   print('Region too large to compute the optimal microgrid.')

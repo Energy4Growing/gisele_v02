@@ -517,7 +517,7 @@ def optimize(crs, resolution, load_capita, pop_per_household, road_coef,Clusters
     MV_grid = gpd.GeoDataFrame()
     secondary_substations=gpd.GeoDataFrame()
     all_houses = gpd.GeoDataFrame()
-    #Clusters=Clusters[Clusters['cluster_ID']==5]
+    #Clusters=Clusters[Clusters['cluster_ID']==18]
     for index, row in Clusters.iterrows():
         os.chdir(gisele_dir)
         print('WORKING ON CLUSTER '+str(row['cluster_ID']))
@@ -574,7 +574,8 @@ def optimize(crs, resolution, load_capita, pop_per_household, road_coef,Clusters
         Population['pop_bool'] = 1
         Starting_node += Population.shape[0]
         Population.to_file(dir + '/population', index=False)
-        if not len(road_points)==0: # normal procedure in case there are roads in the cluster
+        if not len(road_points)<2: # normal procedure in case there are roads in the cluster, actually more
+            #than 1 road point is needed
             roads_multipoint = MultiPoint([point for point in road_points['geometry']])
             road_points['Population'] = 0
             road_points['pop_bool'] = 0
@@ -715,10 +716,21 @@ def optimize(crs, resolution, load_capita, pop_per_household, road_coef,Clusters
                         for i in range(len(terminal_node)-1):
                             for j in range(i+1,len(terminal_node)):
                                 path = T_metric[terminal_node[i]][terminal_node[j]]['path']
+                                #TODO fix the issue if the graph can't be simply cut. The following 6 lines of code are locating
+                                # those nodes, we should find a way to create another node instead of deleting lines. We need
+                                # to add a node in clustered_points and add lines in grid_final. Then, the temprary fix in 757
+                                # will not be needed.
+                                #a=points_new_graph.loc[points_new_graph['ID'].isin(path),'Cluster'].to_list()
+                                #for i in range(len(a)):
+                                #    if not isnan(a[i]) and a[i] != number_clus:
+                                #        print('dont change')
+                                #    else:
+                                #        a[i] = number_clus
                                 points_new_graph.loc[points_new_graph['ID'].isin(path),'Cluster']=number_clus
                 for ind,row in clustered_points.iterrows(): # to fix a possible issue
                     points_new_graph.loc[points_new_graph['ID']==row['ID'],'Cluster']=row['Cluster']
                 #cut the edges that are between clusters to form separate LV networks
+                #points_new_graph.to_file(dir + '/Testing', index=False)
                 cut_edges=[]
                 for i in range(len(lookup_edges)):
                     try: # the only way for this to happen is if one of the points is an intersection between various clusters. In that case, we automatically delete those lines.
@@ -747,7 +759,7 @@ def optimize(crs, resolution, load_capita, pop_per_household, road_coef,Clusters
             for i in range(len(islands)):
                 subgraph_IDs = list(islands[i])
                 clustered_points.loc[clustered_points['ID'].isin(subgraph_IDs),'Cluster']=i
-
+            number_clusters=len(islands)
         for i in range(len(islands)): # for each low voltage network
             print(i)
             subgraph = tree_final.subgraph(islands[i])
@@ -774,7 +786,7 @@ def optimize(crs, resolution, load_capita, pop_per_household, road_coef,Clusters
                         else:
                             total_distance = T_metric[int(row['ID'])][int(row1['ID'])]['distance']
                             #print('distance between '+str(row['ID'] + ' and '+ str(row1['ID'] +' is '+str(total_distance))))
-                        if total_distance >650:
+                        if total_distance >LV_grid_length*1.3:
                             all_points_subset.loc[index,'feasible'] = False
                             all_points_subset.loc[index1, 'feasible'] = False
                             continue
@@ -833,7 +845,7 @@ def optimize(crs, resolution, load_capita, pop_per_household, road_coef,Clusters
                 MV_LV_substations.loc[MV_LV_substations['Cluster'] == i, 'MV_Power'] = load
             else:
                 LV_grid_length = float(MV_LV_substations.loc[MV_LV_substations['Cluster'] == i ,'LV_length'])/1000
-                LV_grid_cost = float(MV_LV_substations.loc[MV_LV_substations['Cluster'] == i, 'LV_length'])*LV_base_cost
+                LV_grid_cost = float(MV_LV_substations.loc[MV_LV_substations['Cluster'] == i, 'LV_length'])*LV_base_cost/1000 #fix
                 max_length = float(MV_LV_substations.loc[MV_LV_substations['Cluster'] == i, 'max_distance'])/1000
                 sum_pop = subset['Population'].sum()
                 load = sum_pop * load_capita * coincidence_factor(sum_pop, pop_per_household)

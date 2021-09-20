@@ -380,9 +380,9 @@ def create_MILP_input_1way(all_points,gisele_folder,case_study,line_bc,resolutio
     pd.DataFrame({'ID':all_nodes}).to_csv(MILP_input_folder+'/nodes.csv',index=False)
     Nodes['ID'].to_csv(MILP_input_folder + '/nodes_clusters.csv', index=False)
     power_list = Nodes['MV_Power'].to_list()
-    power_list = [ceil(i*100)/100 for i in power_list]
+    power_list = [i/1000 for i in power_list] # transfer to MW
+    power_list = [ceil(i*1000)/1000 for i in power_list] # make sure to round to the third decimal, basically 1 kW
     Nodes['MV_Power'] = power_list
-    Nodes['MV_Power']=Nodes['MV_Power']/1000
     Nodes[['ID','MV_Power']].to_csv(MILP_input_folder + '/power_nodes.csv', index=False)
     # Write files about the PS
     Primary_substations[['ID','Power']].to_csv(MILP_input_folder +'/PS_power_max.csv',index=False)
@@ -390,7 +390,7 @@ def create_MILP_input_1way(all_points,gisele_folder,case_study,line_bc,resolutio
     Primary_substations[['ID', 'Voltage']].to_csv(
         MILP_input_folder + '/PS_voltage.csv', index=False)
     # Write files about the MGs
-    mg_powers = [Nodes.loc[Nodes['Cluster']== i,'MV_Power'].sum() for i in range(n_clusters)]
+    mg_powers = [Nodes.loc[Nodes['Cluster']== i,'MV_Power'].sum() for i in range(1,n_clusters+1)]
     pd.DataFrame({'ID': microgrid_nodes}).to_csv(MILP_input_folder + '/microgrids_nodes.csv', index=False)
     pd.DataFrame({'ID': microgrid_nodes,'power':mg_powers}).to_csv(MILP_input_folder +'/microgrids_powers.csv',index=False)
     pd.DataFrame({'ID': microgrid_nodes,'energy': Microgrids.loc[:,'Energy Demand [MWh]']}).to_csv(MILP_input_folder +'/energy.csv',index=False)
@@ -499,7 +499,7 @@ def create_input(gisele_folder,case_study,crs,line_bc,resolution,reliability_opt
     #different functions to better organize the code
     # make sure the copy the important files in the Input folder ( configuration, Load profile etc)
     #
-    create_connections(all_points_withPS,Primary_substations,gisele_folder,case_study,line_bc,resolution,crs,Roads_option,tolerance_outside,Rivers_option)
+    #create_connections(all_points_withPS,Primary_substations,gisele_folder,case_study,line_bc,resolution,crs,Roads_option,tolerance_outside,Rivers_option)
     #calculate_NPC = blablabla
     #calculate_NPC.to_csv
     if mg_option:

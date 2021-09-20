@@ -54,20 +54,20 @@ local_database =False
 country  = 'Lesotho'
 case_study='lesotho_poster'
 
-final_clus=12
 crs = 22287
 resolution = 240
-load_capita=0.7
+load_capita=0.7 #kW
 pop_per_household=4
 resolution_population = 30 # this should be automatic from the raster
 #data used for the local area optimization
 max_length_segment = resolution_population*1.5
-simplify_coef = 5
-crit_dist = simplify_coef/2
+#simplify_coef = 5
+#crit_dist = simplify_coef/2
 
 
 if local_database ==False:
-    database= r'C:\Users\silvi\OneDrive - Politecnico di Milano\Documents\2020-2021\Gisele shared\8.Case_Study'
+    #database= r'C:\Users\silvi\OneDrive - Politecnico di Milano\Documents\2020-2021\Gisele shared\8.Case_Study'
+    database= r'C:\Users\alekd\Politecnico di Milano\Silvia Corigliano - Gisele shared\8.Case_Study'
     cluster_folder = database+'\Lesotho\Villages_areas_46.geojson'
     #cluster_folder = database + '\Lesotho/test_large_village/test_large_village.shp'
     substations_folder = database+'\Lesotho\con_point.shp'
@@ -145,7 +145,7 @@ n_line_type=1
 run_genetic=False
 
 # parameters for the economical factors
-coe = 10000000 # euro/MWh of electrical energy supplied
+coe = 100# euro/MWh of electrical energy supplied
 grid_lifetime = 40 #years
 landcover_option='ESACCI'
 
@@ -154,7 +154,7 @@ landcover_option='ESACCI'
 print('1. CREATE A WEIGHTED GRID OF POINTS')
 # df_weighted = qgis_process.create_input_csv(crs,resolution,resolution_population,landcover_option,country,case_study,database,study_area)
 # accepted_road_types = ['living_street', 'pedestrian', 'primary', 'primary_link', 'secondary', 'secondary_link',
-#                          'tertiary', 'tertiary_link', 'unclassified','residential']
+#                           'tertiary', 'tertiary_link', 'unclassified','residential']
 # Road_nodes,Road_lines = create_roads_new(gisele_folder, case_study, Clusters,crs, accepted_road_types,resolution,resolution_population)
 # Merge_Roads_GridOfPoints(gisele_folder,case_study)
 ''' CLUSTERING PROCEDURE'''
@@ -163,7 +163,7 @@ print('2. LOCATE SECONDARY SUBSTATIONS INSIDE THE CLUSTERS.')
 #Secondary_substations.locate_secondary_ss(crs, resolution_population, load_capita, pop_per_household, road_coef,
 #                       Clusters, case_study, LV_distance, ss_data,landcover_option, gisele_folder)
 #start = time.time()
-# LAO.optimize(crs, resolution_population, load_capita, pop_per_household, road_coef, Clusters, case_study, LV_distance,
+#LAO.optimize(crs, resolution_population, load_capita, pop_per_household, road_coef, Clusters, case_study, LV_distance,
 #            ss_data,landcover_option,gisele_folder,roads_weight,run_genetic, max_length_segment,simplify_coef, crit_dist,LV_base_cost)
 #end = time.time()
 #print(end-start)
@@ -173,8 +173,8 @@ print('4. ROUTE THE MV GRID INSIDE THE CLUSTERS.')
 # grid_routing.routing(Clusters,gisele_folder,case_study,crs,resolution,Roads_option,roads_weight,simplify_road_coef_inside,Rivers_option,line_cost)
 '''Create the input for the MILP'''
 print('5. Create the input for the MILP.')
-# MILP_Input_creation.create_input(gisele_folder,case_study,crs,line_cost,resolution,reliability_option,Roads_option,
-#                          simplify_road_coef_outside, Rivers_option,mg_option,mg_types)
+MILP_Input_creation.create_input(gisele_folder,case_study,crs,line_cost,resolution,reliability_option,Roads_option,
+                         simplify_road_coef_outside, Rivers_option,mg_option,mg_types)
 # if multi_objective_option:
 #     calculate_mg_multiobjective(gisele_folder, case_study, crs)
 # elif mg_option:
@@ -184,20 +184,20 @@ print('5. Create the input for the MILP.')
 
 # '''Execute the desired MILP model'''
 # # print('6. Execute the MILP according to the selected options.')
-n_clusters = Clusters.shape[0]
-start = time.time()
-if mg_option == False and reliability_option==True and n_line_type==1:
-    MILP_models.MILP_without_MG(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reactance,Pmax,line_cost)
-elif mg_option == True and reliability_option==False and n_line_type==1:
-    MILP_models.MILP_MG_noRel(gisele_folder, case_study, n_clusters, coe, voltage, resistance, reactance, Pmax, line_cost)
-elif mg_option == True and reliability_option==False and n_line_type==2:
-    MILP_models.MILP_MG_2cables(gisele_folder, case_study, n_clusters, coe, voltage, resistance, reactance, Pmax, line_cost
-                                 ,resistance2,reactance2,Pmax2,line_cost2)
+# n_clusters = Clusters.shape[0]
+# start = time.time()
+# if mg_option == False and reliability_option==True and n_line_type==1:
+#     MILP_models.MILP_without_MG(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reactance,Pmax,line_cost)
+# elif mg_option == True and reliability_option==False and n_line_type==1:
+#     MILP_models.MILP_MG_noRel(gisele_folder, case_study, n_clusters, coe, voltage, resistance, reactance, Pmax, line_cost)
+# elif mg_option == True and reliability_option==False and n_line_type==2:
+#     MILP_models.MILP_MG_2cables(gisele_folder, case_study, n_clusters, coe, voltage, resistance, reactance, Pmax, line_cost
+#                                  ,resistance2,reactance2,Pmax2,line_cost2)
 #
 # # '''Process the output from the MILP'''
 # # print('7. Process MILP output')
-process_output.process(gisele_folder,case_study,crs,mg_option,reliability_option)
-process_output.create_final_output(gisele_folder, case_study)
+# process_output.process(gisele_folder,case_study,crs,mg_option,reliability_option)
+# process_output.create_final_output(gisele_folder, case_study)
 #
 # end = time.time()
 # print(end-start)
