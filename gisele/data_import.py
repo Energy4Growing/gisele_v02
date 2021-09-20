@@ -2,7 +2,7 @@ import requests
 import pandas as pd
 import json
 import geopandas as gpd
-
+import time
 ##
 # PV
 ##
@@ -36,10 +36,14 @@ def import_pv_data(lat, lon, tilt_angle):
         'azim': 180,
         'format': 'json',
     }
-
-    r = s.get(url, params=args)
-    parsed_response = json.loads(r.text)
-
+    while True:
+        try:
+            r = s.get(url, params=args)
+            parsed_response = json.loads(r.text)
+            break
+        except:
+            print('Problem with importing PV data. Software is in sleep mode for 30 seconds.')
+            time.sleep(30)
     data = pd.read_json(json.dumps(parsed_response['data']),
                         orient='index')
     pv_prod = data
