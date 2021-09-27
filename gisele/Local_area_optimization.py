@@ -574,7 +574,7 @@ def optimize(crs, resolution, load_capita, pop_per_household, road_coef,Clusters
         Population['pop_bool'] = 1
         Starting_node += Population.shape[0]
         Population.to_file(dir + '/population', index=False)
-        if not len(road_points)<2: # normal procedure in case there are roads in the cluster, actually more
+        if not len(road_points)<5 and not road_lines.empty: # normal procedure in case there are roads in the cluster, actually more
             #than 1 road point is needed
             roads_multipoint = MultiPoint([point for point in road_points['geometry']])
             road_points['Population'] = 0

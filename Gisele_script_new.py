@@ -175,11 +175,15 @@ print('4. ROUTE THE MV GRID INSIDE THE CLUSTERS.')
 print('5. Create the input for the MILP.')
 MILP_Input_creation.create_input(gisele_folder,case_study,crs,line_cost,resolution,reliability_option,Roads_option,
                          simplify_road_coef_outside, Rivers_option,mg_option,mg_types)
-# if multi_objective_option:
-#     calculate_mg_multiobjective(gisele_folder, case_study, crs)
-# elif mg_option:
-#      calculate_mg(gisele_folder, case_study, crs,mg_types)
 
+if multi_objective_option:
+    calculate_mg_multiobjective(gisele_folder, case_study, crs)
+elif mg_option:
+     calculate_mg(gisele_folder, case_study, crs,mg_types)
+if reliability_option:
+    MILP_Input_creation.create_MILP_input(gisele_folder,case_study,crs,mg_option) # all the lines are from i-j and j-i, only positive powers to consider reliability
+else:
+    MILP_Input_creation.create_MILP_input_1way(gisele_folder,case_study,crs) # only i-j, without reliability
 
 
 # '''Execute the desired MILP model'''

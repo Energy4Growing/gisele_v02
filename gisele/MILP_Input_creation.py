@@ -263,7 +263,7 @@ def create_connections(all_points,Primary_substations,gisele_folder,case_study,l
     Lines_connections.to_file(data_folder + '/Lines_connections')
     Lines_connections.to_csv(data_folder + '/Lines_connections.csv')
 
-def create_MILP_input(all_points,gisele_folder,case_study,line_bc,resolution,crs,mg_option):
+def create_MILP_input(gisele_folder,case_study,crs,mg_option):
     crs_string = "EPSG:"+str(crs)
     case_folder = gisele_folder + '/Case studies/' + case_study
     data_folder = case_folder + '/Intermediate/Optimization/all_data'
@@ -347,7 +347,7 @@ def create_MILP_input(all_points,gisele_folder,case_study,line_bc,resolution,crs
     All_lines = All_lines.append(Lines_connections)
     All_lines[['ID1','ID2']].to_csv(MILP_input_folder + '/links_all.csv', index=False)
     All_lines[['ID1', 'ID2','Length']].to_csv(MILP_input_folder + '/distances.csv', index=False)
-def create_MILP_input_1way(all_points,gisele_folder,case_study,line_bc,resolution,crs):
+def create_MILP_input_1way(gisele_folder,case_study,crs):
     crs_string = "EPSG:"+str(crs)
     case_folder = gisele_folder + '/Case studies/' + case_study
     data_folder = case_folder + '/Intermediate/Optimization/all_data'
@@ -504,7 +504,3 @@ def create_input(gisele_folder,case_study,crs,line_bc,resolution,reliability_opt
     #calculate_NPC.to_csv
     if mg_option:
         calculate_mg(gisele_folder, case_study, crs,mg_types)
-    if reliability_option:
-        create_MILP_input(all_points_withPS,gisele_folder,case_study,line_bc,resolution,crs,mg_option) # all the lines are from i-j and j-i, only positive powers to consider reliability
-    else:
-        create_MILP_input_1way(all_points_withPS,gisele_folder,case_study,line_bc,resolution,crs) # only i-j, without reliability
