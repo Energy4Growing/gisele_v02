@@ -410,7 +410,7 @@ def create_MILP_input_1way(gisele_folder,case_study,crs):
         Lines_connections=Lines_connections.append(pd.DataFrame(Data))
 
     Lines_connections[['ID1','ID2']].to_csv(MILP_input_folder + '/links_decision.csv', index=False)
-    Lines_connections[['ID1', 'ID2','Cost']].to_csv(MILP_input_folder + '/weights_decision_lines.csv', index=False)
+    Lines_connections[['ID1', 'ID2','Cost']].to_csv(MILP_input_folder + '/weights_decision_lines_npv.csv', index=False)
     #TODO calculation of Cost_npv
     #Lines_connections[['ID1', 'ID2', 'Cost_npv']].to_csv(MILP_input_folder + '/weights_decision_lines_npv.csv', index=False)
     All_lines = Lines_clusters.copy()
@@ -499,8 +499,8 @@ def create_input(gisele_folder,case_study,crs,line_bc,resolution,reliability_opt
     #different functions to better organize the code
     # make sure the copy the important files in the Input folder ( configuration, Load profile etc)
     #
-    #create_connections(all_points_withPS,Primary_substations,gisele_folder,case_study,line_bc,resolution,crs,Roads_option,tolerance_outside,Rivers_option)
+    create_connections(all_points_withPS,Primary_substations,gisele_folder,case_study,line_bc,resolution,crs,Roads_option,tolerance_outside,Rivers_option)
     #calculate_NPC = blablabla
     #calculate_NPC.to_csv
-    if mg_option:
-        calculate_mg(gisele_folder, case_study, crs,mg_types)
+    # if mg_option:
+    #     calculate_mg(gisele_folder, case_study, crs,mg_types)

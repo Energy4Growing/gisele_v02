@@ -81,9 +81,10 @@ def process(gisele_folder,case_study,crs,mg_option,reliability_option):
             Lines.to_csv(write + 'output_connections.csv', index=False)
     except:
         print('empty file - all Microgrids')
-    Lines=gpd.GeoDataFrame(Lines, geometry = 'Geom')
-    Lines.crs=crs
-    Lines.to_file(write+'output_connections')
+    if not Lines.empty:
+        Lines=gpd.GeoDataFrame(Lines, geometry = 'Geom')
+        Lines.crs=crs
+        Lines.to_file(write+'output_connections')
     x=[]
     y=[]
     Power=[]
