@@ -2,8 +2,8 @@ from math import ceil
 from gisele import dijkstra
 from shapely.ops import nearest_points
 from gisele.functions2 import *
-
-
+from scipy.spatial import Delaunay
+from shapely.geometry import Point
 #import SS_Clustering
 def create_node_lines(Nodes,gisele_folder,case_study,crs):
     ''' The goal of this function is to create a csv with the Nodes and Lines (inside clusters) that are supposed to be considered
@@ -114,7 +114,9 @@ def create_node_lines(Nodes,gisele_folder,case_study,crs):
     all_substations[['X','Y','ID','Weight','Cluster','MV_Power','Population','Substation','geometry']].to_csv(
         case_folder+'Intermediate/Optimization/all_data/All_Nodes.csv')
 
-def create_connections(all_points,Primary_substations,gisele_folder,case_study,line_bc,resolution,crs,Roads_option,tolerance_outside, Rivers_option):
+def create_connections(all_points,Primary_substations,gisele_folder,case_study,line_bc,resolution,crs,Roads_option,
+                       tolerance_outside, Rivers_option,allowed_cluster_connections,triangulation_logic):
+    distance_limit_clusters=30*resolution
     print('START CONNECTIONS')
     crs_string = "EPSG:"+str(crs)
     case_folder = gisele_folder + '/Case studies/' + case_study
@@ -138,58 +140,60 @@ def create_connections(all_points,Primary_substations,gisele_folder,case_study,l
         Roads_lines_all = gpd.read_file(case_folder + '/Intermediate/GeoSpatial_Data/Roads_lines/Roads_lines.shp')
     for i in range(1,n_clusters+1):
         for j in range(i + 1, n_clusters+1, 1):
-            print('C-C '+str(i)+str(j))
-            grid_1 = Nodes[Nodes['Cluster'] == i]
-            grid_2 = Nodes[Nodes['Cluster'] == j]
-            dist_2d = pd.DataFrame(distance_2d(grid_1, grid_2, 'X', 'Y'),
-                                   index=grid_1.ID.values,
-                                   columns=grid_2.ID.values)
+            if not triangulation_logic or (i,j) in allowed_cluster_connections:
+                print('Creating the connection C'+str(i)+' and C' +str(j))
+                grid_1 = Nodes[Nodes['Cluster'] == i]
+                grid_2 = Nodes[Nodes['Cluster'] == j]
+                dist_2d = pd.DataFrame(distance_2d(grid_1, grid_2, 'X', 'Y'),
+                                       index=grid_1.ID.values,
+                                       columns=grid_2.ID.values)
 
-            p1 = Nodes_gdf[Nodes_gdf['ID'] == dist_2d.min().idxmin()]
-            p2 = Nodes_gdf[Nodes_gdf['ID'] ==
-                           dist_2d.min(axis=1).idxmin()]
-            #include roads here
-            dist = p1['geometry'].values[0].distance(p2['geometry'].values[0])
-            if Roads_option and dist< 30*resolution:
+                p1 = Nodes_gdf[Nodes_gdf['ID'] == dist_2d.min().idxmin()]
+                p2 = Nodes_gdf[Nodes_gdf['ID'] ==
+                               dist_2d.min(axis=1).idxmin()]
+                #include roads here
+                dist = p1['geometry'].values[0].distance(p2['geometry'].values[0])
+                if Roads_option and dist< 30*resolution:
 
-                if dist < 1000:
-                    extension = dist
-                elif dist < 5000:
-                    extension = dist * 0.6
+                    if dist < 1000:
+                        extension = dist
+                    elif dist < 5000:
+                        extension = dist * 0.6
+                    else:
+                        extension = dist / 4
+                    x_min = min(p1['X'].values[0],p2['X'].values[0])
+                    x_max = max(p1['X'].values[0],p2['X'].values[0])
+                    y_min = min(p1['Y'].values[0],p2['Y'].values[0])
+                    y_max = max(p1['Y'].values[0],p2['Y'].values[0])
+                    bubble = box(minx=x_min - extension, maxx=x_max + extension,
+                                 miny=y_min - extension, maxy=y_max + extension)
+
+                    gdf_roads = gpd.clip(Roads_points_all, bubble)
+                    roads_segments = Roads_lines_all [(Roads_lines_all ['ID1'].isin(gdf_roads.ID.to_list()) &
+                                             Roads_lines_all ['ID2'].isin(gdf_roads.ID.to_list()))]
+                    connection, connection_cost, connection_length, pts = dijkstra.dijkstra_connection_roads_new(all_points, p1,
+                                p2, c_grid_points,    line_bc,  resolution,gdf_roads, roads_segments,Rivers_option,1,1.5,distance_limit_clusters )
+
+
+                elif not Roads_option and dist<30*resolution :
+                    connection, connection_cost, connection_length, pts = dijkstra.dijkstra_connection(all_points, p1, p2,
+                                                                                                   c_grid_points, line_bc,
+                                                                                                   resolution,resolution*30, Rivers_option)
+
                 else:
-                    extension = dist / 4
-                x_min = min(p1['X'].values[0],p2['X'].values[0])
-                x_max = max(p1['X'].values[0],p2['X'].values[0])
-                y_min = min(p1['Y'].values[0],p2['Y'].values[0])
-                y_max = max(p1['Y'].values[0],p2['Y'].values[0])
-                bubble = box(minx=x_min - extension, maxx=x_max + extension,
-                             miny=y_min - extension, maxy=y_max + extension)
-
-                gdf_roads = gpd.clip(Roads_points_all, bubble)
-                roads_segments = Roads_lines_all [(Roads_lines_all ['ID1'].isin(gdf_roads.ID.to_list()) &
-                                         Roads_lines_all ['ID2'].isin(gdf_roads.ID.to_list()))]
-                connection, connection_cost, connection_length, pts = dijkstra.dijkstra_connection_roads_new(all_points, p1,
-                            p2, c_grid_points,    line_bc,  resolution,gdf_roads, roads_segments,Rivers_option,1,1.5,resolution * 20 )
-
-
-            elif not Roads_option and dist<30*resolution :
-                connection, connection_cost, connection_length, pts = dijkstra.dijkstra_connection(all_points, p1, p2,
-                                                                                               c_grid_points, line_bc,
-                                                                                               resolution,resolution*30, Rivers_option)
-
+                    connection_cost = 999999
+                if not connection_cost == 999999 :
+                    # THIS SEGMENT HERE IS TO MAKE SURE THAT THE CONNECTIONS ARE NOT ILLOGICAL AND FAR INTO THE INTERNAL
+                    # CLUSTER GRID
+                    MV_grid = MV_grid_inside_clusters[MV_grid_inside_clusters['Cluster'].isin([i,j])]
+                    Line, connection_length, connection_cost,term_pts = improve_connection\
+                        (MV_grid, all_points, pts, grid_1, grid_2, line_bc)
+                    Data = {'ID1': term_pts[0], 'ID2': term_pts[1], 'C1': i, 'C2': j, 'Cost': connection_cost,
+                            'Length': connection_length, 'geometry': [Line], 'Type': 'C-C'}
+                    Lines_connections = Lines_connections.append(pd.DataFrame(Data))
             else:
-                connection_cost = 999999
-            if not connection_cost == 999999 :
-                # THIS SEGMENT HERE IS TO MAKE SURE THAT THE CONNECTIONS ARE NOT ILLOGICAL AND FAR INTO THE INTERNAL
-                # CLUSTER GRID
-                MV_grid = MV_grid_inside_clusters[MV_grid_inside_clusters['Cluster'].isin([i,j])]
-                Line, connection_length, connection_cost,term_pts = improve_connection\
-                    (MV_grid, all_points, pts, grid_1, grid_2, line_bc)
-                Data = {'ID1': term_pts[0], 'ID2': term_pts[1], 'C1': i, 'C2': j, 'Cost': connection_cost,
-                        'Length': connection_length, 'geometry': [Line], 'Type': 'C-C'}
-                Lines_connections = Lines_connections.append(pd.DataFrame(Data))
-
-    print('Something')
+                print('The connection C'+str(i)+' and C' +str(j)+' is skipped due to the triangulation logic.')
+    print('Starting to create possible connections between clusters and substations')
 
     for i in range(1,n_clusters+1):
         cluster_nodes = Nodes_gdf[Nodes_gdf['Cluster'] == i]
@@ -198,67 +202,55 @@ def create_connections(all_points,Primary_substations,gisele_folder,case_study,l
         grid_multipoint = MultiPoint(points_list)
         print('S-C '+str(i))
         for index, row in Primary_substations.iterrows():
-            sub_node = pd.DataFrame({'X': [row['X']], 'Y': [row['Y']],
-                                     'ID': [row['ID']]})  # this is to fix an issue with this being data series
-            dist_matrix = pd.DataFrame(distance_2d(cluster_nodes, sub_node, 'X', 'Y'),
-                                       index=cluster_nodes.ID.values,
-                                       columns=[Primary_substations.ID.values[index]])
-            p1 = Nodes_gdf[Nodes_gdf['ID'] == dist_matrix.min().idxmin()]
-            p2 = Nodes_gdf[Nodes_gdf['ID'] ==
-                           dist_matrix.min(axis=1).idxmin()]
-            print(p1['ID'])
-            print(p2['ID'])
-            dist = p1['geometry'].values[0].distance(p2['geometry'].values[0])
-            if Roads_option and dist<50*resolution:
+            if not triangulation_logic or (i,str(row['ID'])) in allowed_cluster_connections:
+                sub_node = pd.DataFrame({'X': [row['X']], 'Y': [row['Y']],
+                                         'ID': [row['ID']]})  # this is to fix an issue with this being data series
+                dist_matrix = pd.DataFrame(distance_2d(cluster_nodes, sub_node, 'X', 'Y'),
+                                           index=cluster_nodes.ID.values,
+                                           columns=[Primary_substations.ID.values[index]])
+                p1 = Nodes_gdf[Nodes_gdf['ID'] == dist_matrix.min().idxmin()]
+                p2 = Nodes_gdf[Nodes_gdf['ID'] ==
+                               dist_matrix.min(axis=1).idxmin()]
+                print(p1['ID'])
+                print(p2['ID'])
+                dist = p1['geometry'].values[0].distance(p2['geometry'].values[0])
+                if Roads_option and dist<50*resolution:
 
-                if dist < 1000:
-                    extension = dist
-                elif dist < 5000:
-                    extension = dist * 0.6
+                    if dist < 1000:
+                        extension = dist
+                    elif dist < 5000:
+                        extension = dist * 0.6
+                    else:
+                        extension = dist / 4
+                    x_min = min(p1['X'].values[0],p2['X'].values[0])
+                    x_max = max(p1['X'].values[0],p2['X'].values[0])
+                    y_min = min(p1['Y'].values[0],p2['Y'].values[0])
+                    y_max = max(p1['Y'].values[0],p2['Y'].values[0])
+                    bubble = box(minx=x_min - extension, maxx=x_max + extension,
+                                 miny=y_min - extension, maxy=y_max + extension)
+                    gdf_roads = gpd.clip(Roads_points_all, bubble)
+                    roads_segments = Roads_lines_all[(Roads_lines_all['ID1'].isin(gdf_roads.ID.to_list()) &
+                                                      Roads_lines_all['ID2'].isin(gdf_roads.ID.to_list()))]
+
+                    connection, connection_cost, connection_length, pts = dijkstra.dijkstra_connection_roads_new(all_points, p1,
+                                p2, c_grid_points,    line_bc,  resolution,gdf_roads, roads_segments,Rivers_option,1,1.5,resolution * 25 )
+
+                elif not Roads_option and dist<50*resolution:
+                #try:  # in case the PS is too close to the cluster
+                    connection, connection_cost, connection_length, pts = dijkstra.dijkstra_connection(all_points, p1, p2,
+                             c_grid_points,  line_bc,   resolution, Rivers_option,resolution*50)
+
                 else:
-                    extension = dist / 4
-                x_min = min(p1['X'].values[0],p2['X'].values[0])
-                x_max = max(p1['X'].values[0],p2['X'].values[0])
-                y_min = min(p1['Y'].values[0],p2['Y'].values[0])
-                y_max = max(p1['Y'].values[0],p2['Y'].values[0])
-                bubble = box(minx=x_min - extension, maxx=x_max + extension,
-                             miny=y_min - extension, maxy=y_max + extension)
-                gdf_roads = gpd.clip(Roads_points_all, bubble)
-                roads_segments = Roads_lines_all[(Roads_lines_all['ID1'].isin(gdf_roads.ID.to_list()) &
-                                                  Roads_lines_all['ID2'].isin(gdf_roads.ID.to_list()))]
-
-                connection, connection_cost, connection_length, pts = dijkstra.dijkstra_connection_roads_new(all_points, p1,
-                            p2, c_grid_points,    line_bc,  resolution,gdf_roads, roads_segments,Rivers_option,1,1.5,resolution * 25 )
-
-            elif not Roads_option and dist<50*resolution:
-            #try:  # in case the PS is too close to the cluster
-                connection, connection_cost, connection_length, pts = dijkstra.dijkstra_connection(all_points, p1, p2,
-                         c_grid_points,  line_bc,   resolution, Rivers_option,resolution*50)
-
+                    connection_cost = 999999
+                if not connection_cost == 999999:
+                    MV_grid = MV_grid_inside_clusters[MV_grid_inside_clusters['Cluster'].isin([i])]
+                    Line, connection_length, connection_cost, term_pts = improve_connection \
+                        (MV_grid, all_points, pts, cluster_nodes, sub_node, line_bc)
+                    Data = {'ID1': term_pts[0], 'ID2': term_pts[1], 'C1': i, 'C2':  'S' + str(index), 'Cost': connection_cost,
+                            'Length': connection_length, 'geometry': [Line], 'Type': 'S-C'}
+                    Lines_connections = Lines_connections.append(pd.DataFrame(Data))
             else:
-                connection_cost = 999999
-            if not connection_cost == 999999:
-                MV_grid = MV_grid_inside_clusters[MV_grid_inside_clusters['Cluster'].isin([i])]
-                Line, connection_length, connection_cost, term_pts = improve_connection \
-                    (MV_grid, all_points, pts, cluster_nodes, sub_node, line_bc)
-                Data = {'ID1': term_pts[0], 'ID2': term_pts[1], 'C1': i, 'C2':  'S' + str(index), 'Cost': connection_cost,
-                        'Length': connection_length, 'geometry': [Line], 'Type': 'S-C'}
-                Lines_connections = Lines_connections.append(pd.DataFrame(Data))
-            #except:
-            #    nearest_geoms = nearest_points(row['geometry'], grid_multipoint)
-            #    connection_length = nearest_geoms[0].distance(nearest_geoms[1])
-            #   print('Losho')
-            #    connection_cost = all_points.loc[all_points['geometry'] == nearest_geoms[1], 'Weight'].values[
-            #                          0] * connection_length
-
-            #    pt1 = row['geometry']
-            #    pt2 = all_points.loc[all_points['geometry'] == nearest_geoms[1], 'geometry'].values[0]
-            #    Line = LineString([pt1, pt2])
-            #    Data = {'ID1': p2['ID'].values[0], 'ID2': p1['ID'].values[0], 'C1': i, 'C2': 'S' + str(index),
-            #            'Cost': connection_cost,
-            #            'Length': connection_length, 'geometry': [Line], 'Type': 'S-C'}
-            #    Lines_connections = Lines_connections.append(pd.DataFrame(Data))
-
+                print('The connection C' + str(i) + ' and S' + str(row['ID']) + ' is skipped due to the triangulation logic.')
     Lines_connections = gpd.GeoDataFrame(Lines_connections, geometry=Lines_connections['geometry'], crs=crs)
     Lines_connections.to_file(data_folder + '/Lines_connections')
     Lines_connections.to_csv(data_folder + '/Lines_connections.csv')
@@ -347,7 +339,7 @@ def create_MILP_input(gisele_folder,case_study,crs,mg_option):
     All_lines = All_lines.append(Lines_connections)
     All_lines[['ID1','ID2']].to_csv(MILP_input_folder + '/links_all.csv', index=False)
     All_lines[['ID1', 'ID2','Length']].to_csv(MILP_input_folder + '/distances.csv', index=False)
-def create_MILP_input_1way(gisele_folder,case_study,crs):
+def create_MILP_input_1way(gisele_folder,case_study,crs,mg_option):
     crs_string = "EPSG:"+str(crs)
     case_folder = gisele_folder + '/Case studies/' + case_study
     data_folder = case_folder + '/Intermediate/Optimization/all_data'
@@ -361,17 +353,18 @@ def create_MILP_input_1way(gisele_folder,case_study,crs):
     Nodes=Nodes.drop('geometry',axis=1)
 
     Primary_substations = gpd.read_file(gisele_folder + '/Case studies/' + case_study+'/Input/substations/substations.shp')
-
-    n_substations=Primary_substations.shape[0]
-    Microgrids = pd.read_csv(case_folder+'/Output/Microgrid.csv')
-
-    n_clusters = int(Nodes['Cluster'].max())
-
-    microgrid_nodes = [*range(1000000,1000000*(n_clusters+1),1000000)]
+    if mg_option:
+        Microgrids = pd.read_csv(case_folder+'/Output/Microgrid.csv')
+        n_clusters = int(Nodes['Cluster'].max())
+        microgrid_nodes = [*range(1000000,1000000*(n_clusters+1),1000000)]
     ps_list=Primary_substations['ID'].to_list()
     for i in ps_list:
         Nodes=Nodes.drop(Nodes[Nodes['ID']==i].index)
-    all_nodes = Nodes['ID'].to_list()+ps_list+microgrid_nodes
+    if mg_option:
+        all_nodes = Nodes['ID'].to_list()+ps_list+microgrid_nodes
+    else:
+        all_nodes = Nodes['ID'].to_list()+ps_list
+
 
     #Write all different types of nodes to csv files
 
@@ -390,11 +383,12 @@ def create_MILP_input_1way(gisele_folder,case_study,crs):
     Primary_substations[['ID', 'Voltage']].to_csv(
         MILP_input_folder + '/PS_voltage.csv', index=False)
     # Write files about the MGs
-    mg_powers = [Nodes.loc[Nodes['Cluster']== i,'MV_Power'].sum() for i in range(1,n_clusters+1)]
-    pd.DataFrame({'ID': microgrid_nodes}).to_csv(MILP_input_folder + '/microgrids_nodes.csv', index=False)
-    pd.DataFrame({'ID': microgrid_nodes,'power':mg_powers}).to_csv(MILP_input_folder +'/microgrids_powers.csv',index=False)
-    pd.DataFrame({'ID': microgrid_nodes,'energy': Microgrids.loc[:,'Energy Demand [MWh]']}).to_csv(MILP_input_folder +'/energy.csv',index=False)
-    pd.DataFrame({'ID': microgrid_nodes, 'Cost': Microgrids.loc[:,'Total Cost [kEUR]']}).to_csv(MILP_input_folder +'/microgrids_costs.csv',index=False)
+    if mg_option:
+        mg_powers = [Nodes.loc[Nodes['Cluster']== i,'MV_Power'].sum() for i in range(1,n_clusters+1)]
+        pd.DataFrame({'ID': microgrid_nodes}).to_csv(MILP_input_folder + '/microgrids_nodes.csv', index=False)
+        pd.DataFrame({'ID': microgrid_nodes,'power':mg_powers}).to_csv(MILP_input_folder +'/microgrids_powers.csv',index=False)
+        pd.DataFrame({'ID': microgrid_nodes,'energy': Microgrids.loc[:,'Energy Demand [MWh]']}).to_csv(MILP_input_folder +'/energy.csv',index=False)
+        pd.DataFrame({'ID': microgrid_nodes, 'Cost': Microgrids.loc[:,'Total Cost [kEUR]']}).to_csv(MILP_input_folder +'/microgrids_costs.csv',index=False)
 
 
     #Start processing lines
@@ -403,11 +397,12 @@ def create_MILP_input_1way(gisele_folder,case_study,crs):
     Lines_clusters[['ID1', 'ID2','Cost']].to_csv(MILP_input_folder + '/weights_clusters.csv', index=False)
 
     #Links decision - here we also add the "Fake" microgrid points
-    for i in range(n_clusters):
-        node_mg = microgrid_nodes[i]
-        node_cluster = Nodes.loc[Nodes['Cluster']==i+1,'ID'].values[0]
-        Data = {'ID1':[node_mg],'ID2': [node_cluster], 'Cost': [0],'Length': [1],'Type':'MG'}
-        Lines_connections=Lines_connections.append(pd.DataFrame(Data))
+    if mg_option:
+        for i in range(n_clusters):
+            node_mg = microgrid_nodes[i]
+            node_cluster = Nodes.loc[Nodes['Cluster']==i+1,'ID'].values[0]
+            Data = {'ID1':[node_mg],'ID2': [node_cluster], 'Cost': [0],'Length': [1],'Type':'MG'}
+            Lines_connections=Lines_connections.append(pd.DataFrame(Data))
 
     Lines_connections[['ID1','ID2']].to_csv(MILP_input_folder + '/links_decision.csv', index=False)
     Lines_connections[['ID1', 'ID2','Cost']].to_csv(MILP_input_folder + '/weights_decision_lines.csv', index=False)
@@ -453,7 +448,8 @@ def add_PS_to_grid_of_points(all_points,Primary_substations,next_ID,add_elevatio
         all_points = all_points.append(gpd.GeoDataFrame(Data))
         next_ID+=1
     return all_points
-def create_input(gisele_folder,case_study,crs,line_bc,resolution,reliability_option,Roads_option,tolerance_outside,Rivers_option,mg_option,mg_types):
+def create_input(gisele_folder,case_study,crs,line_bc,resolution,reliability_option,Roads_option,tolerance_outside,Rivers_option
+                 ,mg_option,mg_types,triangulation_logic):
 
     crs_str = "EPSG:"+str(crs)
     case_folder = gisele_folder+'/Case studies/'+case_study
@@ -494,13 +490,74 @@ def create_input(gisele_folder,case_study,crs,line_bc,resolution,reliability_opt
     All_nodes = pd.read_csv(case_folder+'/Intermediate/Optimization/all_data/All_Nodes.csv')
     geometry = [Point(xy) for xy in zip(All_nodes.X, All_nodes.Y)]
     All_nodes = gpd.GeoDataFrame(All_nodes, crs=crs_str, geometry=geometry)
-    All_nodes_withPS = add_PS_to_grid_of_points(All_nodes,Primary_substations,next_ID,add_elevation=False)
-    All_nodes_withPS.to_csv(case_folder+'/Intermediate/Optimization/all_data/All_Nodes.csv',index=False)
+    #All_nodes_withPS = add_PS_to_grid_of_points(All_nodes,Primary_substations,next_ID,add_elevation=False)
+    #All_nodes_withPS.to_csv(case_folder+'/Intermediate/Optimization/all_data/All_Nodes.csv',index=False)
+    All_nodes_withPS=All_nodes
     #different functions to better organize the code
     # make sure the copy the important files in the Input folder ( configuration, Load profile etc)
-    #
-    #create_connections(all_points_withPS,Primary_substations,gisele_folder,case_study,line_bc,resolution,crs,Roads_option,tolerance_outside,Rivers_option)
+    if triangulation_logic:
+        allowed_cluster_connections = delaunay_for_MILP_input_creation(gisele_folder,case_study,crs,All_nodes_withPS)
+    else:
+        allowed_cluster_connections=[]
+    create_connections(all_points_withPS,Primary_substations,gisele_folder,case_study,line_bc,resolution,crs,Roads_option,
+                       tolerance_outside,Rivers_option,allowed_cluster_connections,triangulation_logic)
     #calculate_NPC = blablabla
     #calculate_NPC.to_csv
     if mg_option:
         calculate_mg(gisele_folder, case_study, crs,mg_types)
+def delaunay_for_MILP_input_creation(gisele_folder,case_study,crs,All_nodes):
+    crs_str = "EPSG:" + str(crs)
+    case_folder = gisele_folder + '/Case studies/' + case_study
+    tocki = All_nodes['geometry'].values
+    All_nodes['order'] = [*range(All_nodes.shape[0])]
+    number_points = All_nodes.shape[0]
+    arr = np.zeros([number_points, 2])
+    counter = 0
+    for i in tocki:
+        x = i.xy[0][0]
+        y = i.xy[1][0]
+        arr[counter, 0] = x
+        arr[counter, 1] = y
+        counter += 1
+    tri = Delaunay(arr)
+    triangle_sides = tri.simplices
+    final_sides = []
+    for i in triangle_sides:
+        a = i[0]
+        b = i[1]
+        c = i[2]
+        if a > b:
+            final_sides.append((i[0], i[1]))
+        else:
+            final_sides.append((i[1], i[0]))
+        if b > c:
+            final_sides.append((i[1], i[2]))
+        else:
+            final_sides.append((i[2], i[1]))
+        if a > c:
+            final_sides.append((i[0], i[2]))
+        else:
+            final_sides.append((i[2], i[0]))
+    final_sides2 = list(set(final_sides))
+    list_clusters=[]
+    for i, j in final_sides2:
+        clus1 = All_nodes.loc[All_nodes['order'] == i, 'Cluster'].values[0]
+        clus2 = All_nodes.loc[All_nodes['order'] == j, 'Cluster'].values[0]
+        if not clus1==clus2 and clus1 != -1 and clus2 != -1: #exclude same clusters because this is used only for connections between different clusters
+            list_clusters.append((clus1,clus2))
+        elif clus1 != -1 and clus2 == -1: #the second point is actually a substation
+            id2 = int(All_nodes.loc[All_nodes['order'] == j, 'ID'])
+            list_clusters.append((clus1,str(id2))) #we write the substation as a string, in the second spot
+        elif clus1 == -1 and clus2 != -1:
+            id1 = int(All_nodes.loc[All_nodes['order'] == i, 'ID'])
+            list_clusters.append((clus2, str(id1)))  # we write the substation as a string, in the second spot
+    allowed_cluster_connections = []
+    for i in list_clusters:
+        if type(i[1]) == str: #connections to substations are just added automatically
+            allowed_cluster_connections.append((i[0], i[1]))
+        elif i[0] > i[1]: #for cluster-cluster, we want to make sure that they are in the same order
+            allowed_cluster_connections.append((i[1], i[0]))
+        elif i[1]>i[0]:
+            allowed_cluster_connections.append((i[0], i[1]))
+    allowed_cluster_connections = list(set(allowed_cluster_connections))
+    return allowed_cluster_connections
