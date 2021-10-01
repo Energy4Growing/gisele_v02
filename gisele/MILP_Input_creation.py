@@ -490,9 +490,8 @@ def create_input(gisele_folder,case_study,crs,line_bc,resolution,reliability_opt
     All_nodes = pd.read_csv(case_folder+'/Intermediate/Optimization/all_data/All_Nodes.csv')
     geometry = [Point(xy) for xy in zip(All_nodes.X, All_nodes.Y)]
     All_nodes = gpd.GeoDataFrame(All_nodes, crs=crs_str, geometry=geometry)
-    #All_nodes_withPS = add_PS_to_grid_of_points(All_nodes,Primary_substations,next_ID,add_elevation=False)
-    #All_nodes_withPS.to_csv(case_folder+'/Intermediate/Optimization/all_data/All_Nodes.csv',index=False)
-    All_nodes_withPS=All_nodes
+    All_nodes_withPS = add_PS_to_grid_of_points(All_nodes,Primary_substations,next_ID,add_elevation=False)
+    All_nodes_withPS.to_csv(case_folder+'/Intermediate/Optimization/all_data/All_Nodes.csv',index=False)
     #different functions to better organize the code
     # make sure the copy the important files in the Input folder ( configuration, Load profile etc)
     if triangulation_logic:

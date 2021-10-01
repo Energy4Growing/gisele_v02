@@ -289,12 +289,12 @@ def create_input_csv(crs,resolution,resolution_population,landcover_option,count
     if not rivers_clipped.empty:
         rivers_clipped.to_file(dir + '/Intermediate/Geospatial_Data/Rivers.shp')
     '''Clip the elevation and then change the crs'''
-
+    #notice that when clipping population crs of raster and vector layers must be the same
     elevation_file=locate_file(database,folder='Elevation',extension='.tif')
     with rasterio.open(elevation_file,
 
             mode='r') as src:
-        out_image, out_transform = rasterio.mask.mask(src, study_area_buffered, crop=True)
+        out_image, out_transform = rasterio.mask.mask(src, study_area_buffered.to_crs(src.crs), crop=True)
         print(src.crs)
 
     out_meta = src.meta
@@ -316,7 +316,7 @@ def create_input_csv(crs,resolution,resolution_population,landcover_option,count
     with rasterio.open(slope_file,
 
             mode='r') as src:
-        out_image, out_transform = rasterio.mask.mask(src, study_area_buffered, crop=True)
+        out_image, out_transform = rasterio.mask.mask(src, study_area_buffered.to_crs(src.crs), crop=True)
         print(src.crs)
 
     out_meta = src.meta
@@ -339,7 +339,7 @@ def create_input_csv(crs,resolution,resolution_population,landcover_option,count
             population_file,
 
             mode='r') as src:
-        out_image, out_transform = rasterio.mask.mask(src, study_area_buffered, crop=True)
+        out_image, out_transform = rasterio.mask.mask(src, study_area_buffered.to_crs(src.crs), crop=True)
         print(src.crs)
 
     out_meta = src.meta
@@ -363,7 +363,7 @@ def create_input_csv(crs,resolution,resolution_population,landcover_option,count
             landcover_file,
 
             mode='r') as src:
-        out_image, out_transform = rasterio.mask.mask(src, study_area_buffered, crop=True)
+        out_image, out_transform = rasterio.mask.mask(src, study_area_buffered.to_crs(src.crs), crop=True)
         print(src.crs)
 
     out_meta = src.meta
