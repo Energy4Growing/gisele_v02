@@ -502,7 +502,7 @@ def process_roads(Roads,roads_weight,crs,directory,max_length_segment,simplify_c
     #new_lines.to_file(directory+ '/new_lines', index=False)
     return new_points,new_lines
 def optimize(crs, resolution, load_capita, pop_per_household, road_coef,Clusters, case_study, LV_distance, ss_data,
-             landcover_option,gisele_dir,roads_weight,run_genetic,max_length_segment,simplify_coef,crit_dist,LV_base_cost):
+             landcover_option,gisele_dir,roads_weight,run_genetic,max_length_segment,simplify_coef,crit_dist,LV_base_cost,population_dataset_type):
     dir_input = r'Case studies/' + case_study + '/Intermediate/Geospatial_Data'
 
     dir_output = '/Case studies/' + case_study + '/Output'
@@ -530,7 +530,14 @@ def optimize(crs, resolution, load_capita, pop_per_household, road_coef,Clusters
         area_buffered = area
         # area_buffered = row['geometry'].buffer((resolution_MV * 0.1 / 11250) / 2)
         area_list = [area_buffered]
-        grid_of_points = create_grid(crs, resolution, area)
+        if population_dataset_type == 'raster':
+            grid_of_points = create_grid(crs, resolution, area)
+            Population = rasterio.open(dir_input + '/Population_' + str(crs) + '.tif')
+        else:
+            Population = gpd.read_file(dir_input+'/Population_' + str(crs) + '.shp')
+            grid_of_points = gpd.clip(Population,area_buffered)
+            grid_of_points['X'] = [point['geometry'].xy[0][0] for index, point in grid_of_points.iterrows()]
+            grid_of_points['Y'] = [point['geometry'].xy[1][0] for index, point in grid_of_points.iterrows()]
         grid_of_points.to_file(dir + '/points.shp')
         #min_x, min_y, max_x, max_y = area.bounds
         #area_for_roads = geometry.Polygon(
@@ -545,7 +552,7 @@ def optimize(crs, resolution, load_capita, pop_per_household, road_coef,Clusters
         road_lines = road_lines[(road_lines['ID1'].isin(road_points.ID.to_list()) &
                                                  road_lines['ID2'].isin(road_points.ID.to_list()))]
         # OPEN THE RASTERS FOR THE SPECIFIC REGION WHERE OUR CLUSTER IS
-        Population = rasterio.open(dir_input + '/Population_' + str(crs) + '.tif')
+
         Elevation = rasterio.open(dir_input + '/Elevation_' + str(crs) + '.tif')
         Slope = rasterio.open(dir_input + '/Slope_' + str(crs) + '.tif')
         LandCover = rasterio.open(dir_input + '/LandCover_' + str(crs) + '.tif')
@@ -554,8 +561,14 @@ def optimize(crs, resolution, load_capita, pop_per_household, road_coef,Clusters
         coords = [(x, y) for x, y in zip(grid_of_points.X, grid_of_points.Y)]
         grid_of_points = grid_of_points.reset_index(drop=True)
         grid_of_points['ID'] = grid_of_points.index
-
-        grid_of_points['Population'] = [x[0] for x in Population.sample(coords)]
+        if population_dataset_type == 'raster':
+            grid_of_points['Population'] = [x[0] for x in Population.sample(coords)]
+        else:
+            grid_of_points['Population'] = pop_per_household
+            #specific things for the analysis of Isola del Giglio
+            grid_of_points.loc[(grid_of_points['building'] == 'residential') & (grid_of_points['area'] > 120), 'Population'] = 10
+            grid_of_points.loc[(grid_of_points['building'] == 'residential') & (grid_of_points['height'].astype(float) > 12), 'Population'] = 10#6KW
+            grid_of_points.loc[(grid_of_points['building'] == 'residential') & (grid_of_points['area'] > 120) & (grid_of_points['height'].astype(float)>12),'Population'] = 25
         grid_of_points['Elevation'] = [x[0] for x in Elevation.sample(coords)]
         grid_of_points['Slope'] = [x[0] for x in Slope.sample(coords)]
         grid_of_points['Land_cover'] = [x[0] for x in LandCover.sample(coords)]
@@ -869,11 +882,16 @@ def optimize(crs, resolution, load_capita, pop_per_household, road_coef,Clusters
         LV_grid = LV_grid.append(grid_final)
         terminal_MV_nodes = MV_LV_substations['ID'].to_list()
         ### ROUTE THE MV NETWORK BY ASSIGNING A LOWER COST TO THE EXISTING LV NETWORK
+        strategy='discount'
         if len(terminal_MV_nodes)>1:
-            for i in tree_final_copy.edges:
-                if tree_final.has_edge(*i):
-                    # HERE PUT THIS AS AN ADDITIONAL DISCOUNT, BUT THE GRID HAS TO GO ACCROSS THE ROADS AND NOT PASS THROUGH SOMEONE's HOUSE
-                    tree_final_copy[i[0]][i[1]]['weight'] *= 0.5
+            if strategy=='discount':
+                for i in tree_final_copy.edges:
+                    if tree_final.has_edge(*i):
+                        # HERE PUT THIS AS AN ADDITIONAL DISCOUNT, BUT THE GRID HAS TO GO ACCROSS THE ROADS AND NOT PASS THROUGH SOMEONE's HOUSE
+                        #Aleksandar 2/24/2022 -> I changed it to 1 to avoid the MV grid going through houses
+                        tree_final_copy[i[0]][i[1]]['weight'] *= 1
+            else:
+                pass # here we need to create a new graph containing the grid of points, roads and substations
 
             tree_MV = steiner_tree(tree_final_copy, terminal_MV_nodes)
             grid_MV = gpd.GeoDataFrame()
@@ -884,7 +902,8 @@ def optimize(crs, resolution, load_capita, pop_per_household, road_coef,Clusters
                 point2 = all_points.loc[all_points['ID'] == i[1], 'geometry'].values[0]
                 id1 = int(all_points.loc[all_points['ID'] == i[0], 'ID'])
                 id2 = int(all_points.loc[all_points['ID'] == i[1], 'ID'])
-                length = T_metric[i[0]][i[1]]['distance']/1000
+                # here a huge fix because i was dividing by 1000, in that case the lenghts in the optimization were 1000 times smaller.
+                length = T_metric[i[0]][i[1]]['distance']
                 cost = length*LV_base_cost # change this
                 geom = LineString([point1, point2])
                 grid_MV = grid_MV.append(gpd.GeoDataFrame({'ID1': [id1],'ID2':[id2],'geometry': [geom],'Length':[length],'Cost': [cost]}))

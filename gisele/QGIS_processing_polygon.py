@@ -260,11 +260,11 @@ def create_input_csv(crs,resolution,resolution_population,landcover_option,count
     protected_areas = gpd.read_file(protected_areas_file)
     protected_areas = protected_areas.to_crs(crs)
 
-    rivers_file = locate_file(database, folder='Rivers',
-                                       extension='.shp')
-    rivers = gpd.read_file(rivers_file)
-    rivers = rivers.to_crs(crs)
-    rivers = rivers[rivers['DIS_AV_CMS']>2] # todo -> make this number reasonable
+    #rivers_file = locate_file(database, folder='Rivers',
+    #                                   extension='.shp')
+    #rivers = gpd.read_file(rivers_file)
+    #rivers = rivers.to_crs(crs)
+    #rivers = rivers[rivers['DIS_AV_CMS']>2] # todo -> make this number reasonable
 
     roads_file=locate_file(database,folder='Roads',extension='.shp')
     streets = gpd.read_file(roads_file)
@@ -279,22 +279,22 @@ def create_input_csv(crs,resolution,resolution_population,landcover_option,count
     '''Clip the protected areas'''
     protected_areas_clipped=gpd.clip(protected_areas,study_area_crs)
     streets_clipped = gpd.clip(streets,study_area_crs)
-    rivers_clipped = gpd.clip(rivers, study_area_crs)
+    #rivers_clipped = gpd.clip(rivers, study_area_crs)
     if not streets_clipped.empty:
         streets_clipped.to_file(dir+'/Intermediate/Geospatial_Data/Roads.shp')
 
     if not protected_areas_clipped.empty:
         protected_areas_clipped.to_file(dir+'/Intermediate/Geospatial_Data/protected_area.shp')
 
-    if not rivers_clipped.empty:
-        rivers_clipped.to_file(dir + '/Intermediate/Geospatial_Data/Rivers.shp')
+    #if not rivers_clipped.empty:
+    #    rivers_clipped.to_file(dir + '/Intermediate/Geospatial_Data/Rivers.shp')
     '''Clip the elevation and then change the crs'''
     #notice that when clipping population crs of raster and vector layers must be the same
     elevation_file=locate_file(database,folder='Elevation',extension='.tif')
     with rasterio.open(elevation_file,
 
             mode='r') as src:
-        out_image, out_transform = rasterio.mask.mask(src, study_area_buffered.to_crs(src.crs), crop=True)
+        out_image, out_transform = rasterio.mask.mask(src, study_area_buffered, crop=True)
         print(src.crs)
 
     out_meta = src.meta

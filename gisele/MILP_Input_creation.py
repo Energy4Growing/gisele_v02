@@ -233,7 +233,7 @@ def create_connections(all_points,Primary_substations,gisele_folder,case_study,l
                                                       Roads_lines_all['ID2'].isin(gdf_roads.ID.to_list()))]
 
                     connection, connection_cost, connection_length, pts = dijkstra.dijkstra_connection_roads_new(all_points, p1,
-                                p2, c_grid_points,    line_bc,  resolution,gdf_roads, roads_segments,Rivers_option,1,1.5,resolution * 25 )
+                                p2, c_grid_points, line_bc, resolution,gdf_roads, roads_segments,Rivers_option,1,1.5,resolution * 25 )
 
                 elif not Roads_option and dist<50*resolution:
                 #try:  # in case the PS is too close to the cluster

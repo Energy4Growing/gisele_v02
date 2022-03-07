@@ -164,7 +164,7 @@ def Merge_Roads_GridOfPoints(gisele_folder,case_study):
 def improve_connection(MV_grid,all_points,pts,grid_1,grid_2,line_bc):
     graph = nx.Graph()
     for i, row in MV_grid.iterrows():
-        graph.add_edge(int(row.ID1), int(row.ID2),length = row.Length, weight=row.Cost)
+        graph.add_edge(int(row.ID1), int(row.ID2),length = row.Length/1000, weight=row.Cost/1000)
 
     for i in pts:
         if not graph.has_edge(i[0], i[1]):

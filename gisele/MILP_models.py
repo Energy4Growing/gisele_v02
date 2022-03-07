@@ -2394,8 +2394,7 @@ def MILP_base(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reactan
 
     def ObjectiveFunction(model):
         return summation(model.weights, model.x) * model.cf / 1000 + summation(model.ps_cost, model.k)
-
-        # return summation(model.weights, model.x) * model.cf / 1000  + summation(model.ps_cost,model.k) - sum(model.Psub[i]*model.Distance[i] for i in model.N_clusters)*reliability_index
+        # return summation(model.cost_asset,model.flex_positive) + return summation(model.cost_asset, model.flex_negative)
 
     model.Obj = Objective(rule=ObjectiveFunction, sense=minimize)
 
@@ -2408,7 +2407,8 @@ def MILP_base(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reactan
     opt.options['TimeLimit'] = 600
     # opt.options['numericfocus']=0
     # opt.options['mipgap'] = 0.0002
-    # opt.options['presolve']=2
+    opt.options['presolve']=0
+    opt.options['PreCrush']=1
     # opt.options['mipfocus']=2
     # opt = SolverFactory('cbc',executable=r'C:\Users\Asus\Desktop\POLIMI\Thesis\GISELE\New folder\cbc')
     print('Starting optimization process')
