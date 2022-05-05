@@ -26,21 +26,21 @@ import rasterio
 # Pmax = 11  # [MVA]
 
 #cable of 48mm2
-# resistance = 0.321  # [ohm/km]
-# reactance = 0.372  # [ohm/km]
-# Pmax = 4  # [MVA]
-# line_cost = 10000  # Cost of MV voltage feeders [€/km]
+resistance = 0.321  # [ohm/km]
+reactance = 0.372  # [ohm/km]
+Pmax = 4  # [MVA]
+line_cost = 10000  # Cost of MV voltage feeders [€/km]
 
 #new cable - 70mm2
-resistance = 0.41
-reactance = 0.306
-Pmax=6
-line_cost=10000
-#new cable - 70mm2
-resistance = 0.305
-reactance = 0.35
-Pmax=6
-line_cost=10000
+# resistance = 0.41
+# reactance = 0.306
+# Pmax=6
+# line_cost=10000
+# #new cable - 70mm2
+# resistance = 0.305
+# reactance = 0.35
+# Pmax=6
+# line_cost=10000
 #second cable - this cable is used only in case the MILP option with 2 different lines is chosen
 resistance2 = 0.35
 reactance2 = 0.38
@@ -52,7 +52,7 @@ line_cost2 = 8000 # Cost of MV voltage feeders [€/km]
 # reactance = 0.36  # [ohm/km]
 # Pmax = 5.5  # [MVA]
 
-voltage = 15 # [kV]
+voltage = 11 # [kV] 15kV - Italy , 11kV Lesotho
 
 LV_base_cost=10000 # for the LV we are not checking electrical parameters
 
@@ -62,10 +62,10 @@ gisele_folder=os.getcwd()
 villages_file = 'Villages_areas.geojson'
 villages_file = 'test_large_village/test_large_village.shp'
 local_database =False
-country  = 'Isola_Giglio' #Mozambique
-case_study='Isola_Giglio2' #majawa
+country  = 'Lesotho' #Mozambique
+case_study='butha_buthe_over100_ongrid' #majawa #Isola_Giglio2
 
-crs = 32632 #32737
+crs = 22287 #32632 - Italy , 22287 - Lesotho
 resolution = 100 #240
 load_capita= 0.6 #0.2 #kW
 pop_per_household=5
@@ -150,7 +150,7 @@ simplify_road_coef_outside = 30 # in meters, used for creating connections among
 road_coef = 2
 roads_weight=0.3
 ### USER OPTIONS
-mg_option = False
+mg_option = True
 mg_types =1 #if more than one mg for each cluster needs to be computed, with different reliability levels (needed for multiobjective: mg_types=3)
 multi_objective_option = False
 reliability_option = False
@@ -192,10 +192,15 @@ print('4. ROUTE THE MV GRID INSIDE THE CLUSTERS.')
 # MILP_Input_creation.create_input(gisele_folder,case_study,crs,line_cost,resolution,reliability_option,Roads_option,
 #                          simplify_road_coef_outside, Rivers_option,mg_option,mg_types,triangulation_logic)
 
-if multi_objective_option:
-    calculate_mg_multiobjective(gisele_folder, case_study, crs)
-elif mg_option:
-     calculate_mg(gisele_folder, case_study, crs,mg_types)
+n_clusters = Clusters.shape[0]
+losses=False
+reliability_option=False
+mg_option = False
+n_line_type= 1
+# if multi_objective_option:
+#     calculate_mg_multiobjective(gisele_folder, case_study, crs)
+# elif mg_option:
+#      calculate_mg(gisele_folder, case_study, crs,mg_types)
 if reliability_option:
     MILP_Input_creation.create_MILP_input(gisele_folder,case_study,crs,mg_option) # all the lines are from i-j and j-i, only positive powers to consider reliability
 else:
@@ -204,7 +209,7 @@ else:
 '''Here do an alternative of the MILP_Input_Creation, in which each "substation is actually the entire cluster"'''
 '''Execute the desired MILP model'''
 print('6. Execute the MILP according to the selected options.')
-n_clusters = Clusters.shape[0]
+
 start = time.time()
 if mg_option == False and reliability_option==True and n_line_type==1:
     MILP_models.MILP_without_MG(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reactance,Pmax,line_cost)
@@ -213,12 +218,24 @@ elif mg_option == True and reliability_option==False and n_line_type==1:
 elif mg_option == True and reliability_option==False and n_line_type==2:
     MILP_models.MILP_MG_2cables(gisele_folder, case_study, n_clusters, coe, voltage, resistance, reactance, Pmax, line_cost
                                  ,resistance2,reactance2,Pmax2,line_cost2)
+#elif mg_option == False and reliability_option == False and n_line_type ==1 and losses==True:
+    MILP_models.MILP_base_losses2(gisele_folder, case_study, n_clusters, coe, voltage, resistance,
+                                                   reactance, Pmax, line_cost)
 elif mg_option == False and reliability_option == False and n_line_type ==1:
     MILP_models.MILP_base(gisele_folder, case_study, n_clusters, coe, voltage, resistance,
                                                    reactance, Pmax, line_cost)
 
-# # '''Process the output from the MILP'''
+elif mg_option == False and reliability_option==False and n_line_type==2:
+    MILP_models.MILP_2cables(gisele_folder, case_study, n_clusters, coe, voltage, resistance, reactance, Pmax, line_cost
+                                 ,resistance2,reactance2,Pmax2,line_cost2)
+
+
+end = time.time()
+print(end-start)
+'''Process the output from the MILP'''
+
 print('7. Process MILP output')
+reliability_option=False
 process_output.process(gisele_folder,case_study,crs,mg_option,reliability_option)
 process_output.create_final_output(gisele_folder, case_study)
 

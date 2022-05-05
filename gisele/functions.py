@@ -541,7 +541,7 @@ def sizing(load_profile, clusters_list, geo_df_clustered, wt, mg_types, gisele_f
                 renewables fraction in michele changes accordingly
     :return mg: Dataframe containing the information of the Clusters' microgrid
     """
-
+    speed_up = True
     case_folder = gisele_folder + '/Case studies/' + case_study
     geo_df_clustered = geo_df_clustered.to_crs(4326)
     mg = {}
@@ -571,7 +571,7 @@ def sizing(load_profile, clusters_list, geo_df_clustered, wt, mg_types, gisele_f
     proj_lifetime = input_michele['num_years']
     num_typ_days = input_michele['num_days']
     clusters = clusters_list.Cluster
-    for index in range(len(clusters)): # fix because the Clusters are starting from 1 instead of 0
+    for index in range(len(clusters)):
         # try:
         cluster_n = clusters[index]
         l()
@@ -585,8 +585,9 @@ def sizing(load_profile, clusters_list, geo_df_clustered, wt, mg_types, gisele_f
         all_angles = pd.read_csv(gisele_folder+'/general_input/TiltAngles.csv')
         tilt_angle = abs(all_angles.loc[abs(all_angles['lat'] - lat).idxmin(),
                                       'opt_tilt'])
-        pv_prod = import_pv_data(lat, lon, tilt_angle)
-        wt_prod = import_wind_data(lat, lon, wt)
+        if (speed_up==True and index==0) or speed_up==False:
+            pv_prod = import_pv_data(lat, lon, tilt_angle)
+            wt_prod = import_wind_data(lat, lon, wt)
         utc = pv_prod.local_time[0]
         if type(utc) is pd.Timestamp:
           time_shift = utc.hour

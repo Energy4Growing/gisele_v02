@@ -100,14 +100,25 @@ def process(gisele_folder,case_study,crs,mg_option,reliability_option):
 
                 x.append(float(Nodes.loc[(Nodes['ID']==id),'X']))
                 y.append(float(Nodes.loc[(Nodes['ID']==id),'Y']))
-                cluster.append(float(Nodes.loc[(Nodes['ID']==id),'Cluster']))
+                clus = int(Nodes.loc[(Nodes['ID']==id),'Cluster'])
+                cluster.append(clus)
                 ID.append(id)
                 voltage.append(round(row['voltage [p.u]'],3))
                 Power.append(round(float(Nodes.loc[(Nodes['ID']==id),'MV_Power']),3))
+                if mg_option:
+                    if clus==-1: # it means it is a connection point with the existing grid
+                        mg.append(0)
+                    else:
+                        mg.append(Microgrid.loc[Microgrid['index']==int((clus)*10e5),'microgrid'].values[0])
+                        print(Microgrid.loc[Microgrid['index']==int((clus+1)*10e5),'microgrid'].values[0])
+
             except:
                 print('microgrid fake node')
                 print(row['index'])
-        Data = {'ID': ID, 'X': x, 'Y': y, 'Voltage': voltage, 'Power': Power, 'Cluster': cluster}
+        if mg_option:
+            Data = {'ID': ID, 'X': x, 'Y': y, 'Voltage': voltage, 'Power': Power, 'Cluster': cluster,'off-grid':mg}
+        else:
+            Data = {'ID': ID, 'X': x, 'Y': y, 'Voltage': voltage, 'Power': Power, 'Cluster': cluster}
     else:
         for index, row in Voltages.iterrows():
             try:
