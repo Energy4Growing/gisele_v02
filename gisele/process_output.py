@@ -110,11 +110,11 @@ def process(gisele_folder,case_study,crs,mg_option,reliability_option):
                         mg.append(0)
                     else:
                         mg.append(Microgrid.loc[Microgrid['index']==int((clus)*10e5),'microgrid'].values[0])
-                        print(Microgrid.loc[Microgrid['index']==int((clus+1)*10e5),'microgrid'].values[0])
+                        # print(Microgrid.loc[Microgrid['index']==int((clus)*10e5),'microgrid'].values[0])
 
             except:
                 print('microgrid fake node')
-                print(row['index'])
+                # print(row['index'])
         if mg_option:
             Data = {'ID': ID, 'X': x, 'Y': y, 'Voltage': voltage, 'Power': Power, 'Cluster': cluster,'off-grid':mg}
         else:
@@ -133,7 +133,7 @@ def process(gisele_folder,case_study,crs,mg_option,reliability_option):
                 dist.append(round(-float(dist_from_PS.loc[(dist_from_PS['index'] == id), 'length[m]']),3))
             except:
                 print('microgrid fake node')
-                print(row['index'])
+                # print(row['index'])
         Data = {'ID': ID, 'X': x, 'Y': y, 'Voltage': voltage, 'Power': Power, 'Cluster': cluster,'Distance':dist}
 
     #Data={'ID': ID, 'X': x, 'Y': y, 'Voltage': voltage,'Microgrid': mg,'Power': Power }

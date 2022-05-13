@@ -255,7 +255,7 @@ def create_connections(all_points,Primary_substations,gisele_folder,case_study,l
     Lines_connections.to_file(data_folder + '/Lines_connections')
     Lines_connections.to_csv(data_folder + '/Lines_connections.csv')
 
-def create_MILP_input(gisele_folder,case_study,crs,mg_option):
+def create_MILP_input(gisele_folder,case_study,crs,mg_option,MV_coincidence):
     crs_string = "EPSG:"+str(crs)
     case_folder = gisele_folder + '/Case studies/' + case_study
     data_folder = case_folder + '/Intermediate/Optimization/all_data'
@@ -290,10 +290,16 @@ def create_MILP_input(gisele_folder,case_study,crs,mg_option):
     Primary_substations['ID'].to_csv(MILP_input_folder+'/nodes_PS.csv',index=False)
     pd.DataFrame({'ID':all_nodes}).to_csv(MILP_input_folder+'/nodes.csv',index=False)
     Nodes['ID'].to_csv(MILP_input_folder + '/nodes_clusters.csv', index=False)
+
     power_list = Nodes['MV_Power'].to_list()
-    power_list = [ceil(i*10)/10 for i in power_list]
-    Nodes['MV_Power'] = power_list
-    Nodes['MV_Power']=Nodes['MV_Power']/1000
+    power_list = [i / 1000 for i in power_list]  # transfer to MW
+    power_list = [ceil(i * 1000) / 1000 for i in power_list]  # make sure to round to the third decimal, basically 1 kW
+    Nodes['MV_Power'] = power_list * MV_coincidence
+
+    #power_list = Nodes['MV_Power'].to_list()
+    #power_list = [ceil(i*10)/10 for i in power_list]
+    #Nodes['MV_Power'] = power_list
+    #Nodes['MV_Power']=Nodes['MV_Power']/1000*MV_coincidence
     Nodes[['ID','MV_Power']].to_csv(MILP_input_folder + '/power_nodes.csv', index=False)
     # Write files about the PS
     Primary_substations[['ID','Power']].to_csv(MILP_input_folder +'/PS_power_max.csv',index=False)
@@ -339,7 +345,7 @@ def create_MILP_input(gisele_folder,case_study,crs,mg_option):
     All_lines = All_lines.append(Lines_connections)
     All_lines[['ID1','ID2']].to_csv(MILP_input_folder + '/links_all.csv', index=False)
     All_lines[['ID1', 'ID2','Length']].to_csv(MILP_input_folder + '/distances.csv', index=False)
-def create_MILP_input_1way(gisele_folder,case_study,crs,mg_option):
+def create_MILP_input_1way(gisele_folder,case_study,crs,mg_option,MV_coincidence):
     crs_string = "EPSG:"+str(crs)
     case_folder = gisele_folder + '/Case studies/' + case_study
     data_folder = case_folder + '/Intermediate/Optimization/all_data'
@@ -348,6 +354,7 @@ def create_MILP_input_1way(gisele_folder,case_study,crs,mg_option):
 
     # read everything else
     Lines_clusters = pd.read_csv(data_folder+'/Lines_clusters.csv')
+    Lines_clusters['Length'] = Lines_clusters['Length']*1000
     Lines_connections = pd.read_csv(data_folder+'/Lines_connections.csv')
     Nodes = pd.read_csv(data_folder+'/All_Nodes.csv')
     Nodes=Nodes.drop('geometry',axis=1)
@@ -374,7 +381,7 @@ def create_MILP_input_1way(gisele_folder,case_study,crs,mg_option):
     Nodes['ID'].to_csv(MILP_input_folder + '/nodes_clusters.csv', index=False)
     power_list = Nodes['MV_Power'].to_list()
     power_list = [i/1000 for i in power_list] # transfer to MW
-    power_list = [ceil(i*1000)/1000 for i in power_list] # make sure to round to the third decimal, basically 1 kW
+    power_list = [ceil(i*1000)/1000*MV_coincidence for i in power_list] # make sure to round to the third decimal, basically 1 kW
     Nodes['MV_Power'] = power_list
     Nodes[['ID','MV_Power']].to_csv(MILP_input_folder + '/power_nodes.csv', index=False)
     # Write files about the PS

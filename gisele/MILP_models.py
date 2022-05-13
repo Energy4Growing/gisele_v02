@@ -17,12 +17,14 @@ from datetime import datetime
 import os
 def MILP_without_MG(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reactance,Pmax,line_cost):
     ############ Create abstract model ###########
+    print('MILP WITHOUT MG')
     model = AbstractModel()
     data = DataPortal()
     MILP_input_folder = gisele_folder + '/Case studies/' + case_study + '/Intermediate/Optimization/MILP_input'
     MILP_output_folder = gisele_folder + '/Case studies/' + case_study + '/Intermediate/Optimization/MILP_output'
     os.chdir(MILP_input_folder)
-
+    distance_constraint = False
+    voltage_constraint = True
     # Define some basic parameter for the per unit conversion and voltage limitation
     Abase = 1
     Vmin = 0.9
@@ -80,8 +82,7 @@ def MILP_without_MG(gisele_folder,case_study,n_clusters,coe,voltage,resistance,r
     model.PSmax = Param(model.N_PS)
     data.load(filename='PS_power_max.csv', param=model.PSmax)
 
-    model.PS_voltage = Param(model.N_PS)
-    data.load(filename='PS_voltage.csv', param=model.PS_voltage)
+
 
     model.PS_distance = Param(model.N_PS)
     data.load(filename='PS_distance.csv', param=model.PS_distance)
@@ -92,22 +93,27 @@ def MILP_without_MG(gisele_folder,case_study,n_clusters,coe,voltage,resistance,r
 
     model.weights = Param(model.links_decision)
     data.load(filename='weights_decision_lines.csv', param=model.weights)
+    if voltage_constraint:
     # Electrical parameters of all the cables
-    model.V_ref = Param(initialize=voltage)
-    model.A_ref = Param(initialize=Abase)
-    model.E_min = Param(initialize=Vmin)
+        model.V_ref = Param(initialize=voltage)
+        model.A_ref = Param(initialize=Abase)
+        model.E_min = Param(initialize=Vmin)
 
-    model.R_ref = Param(initialize=resistance)
-    model.X_ref = Param(initialize=reactance)
-    model.P_max = Param(initialize=Pmax)
-    model.cf = Param(initialize=line_cost)
+        model.R_ref = Param(initialize=resistance)
+        model.X_ref = Param(initialize=reactance)
 
-    model.Z = Param(initialize=model.R_ref + model.X_ref * 0.5)
-    model.Z_ref = Param(initialize=model.V_ref ** 2 / Abase)
+
+
+        model.Z = Param(initialize=model.R_ref + model.X_ref * 0.5)
+        model.Z_ref = Param(initialize=model.V_ref ** 2 / Abase)
+        model.PS_voltage = Param(model.N_PS)
+        data.load(filename='PS_voltage.csv', param=model.PS_voltage)
+        model.E = Var(model.N, within=NonNegativeReals)
 
     model.n_clusters = Param(initialize=n_clusters)
     model.coe = Param(initialize=coe)
-
+    model.cf = Param(initialize=line_cost)
+    model.P_max = Param(initialize=Pmax)
     #####################Define variables#####################
 
     # binary variable x[i,j]: 1 if the connection i,j is present, 0 otherwise
@@ -115,7 +121,7 @@ def MILP_without_MG(gisele_folder,case_study,n_clusters,coe,voltage,resistance,r
     # power[i,j] is the power flow of connection i-j
     model.P = Var(model.links)
     # positive variables E(i) is p.u. voltage at each node
-    model.E = Var(model.N, within=NonNegativeReals)
+
 
     # binary variable k[i]: 1 if node i is a primary substation, 0 otherwise
     model.k = Var(model.N_PS, within=Binary)
@@ -125,7 +131,7 @@ def MILP_without_MG(gisele_folder,case_study,n_clusters,coe,voltage,resistance,r
     model.Distance = Var(model.N, within=Reals)
 
     model.cable_type = Var(model.links)
-
+    model.M = Param(initialize=10)
     #####################Define constraints###############################
 
     # Radiality constraint
@@ -169,25 +175,25 @@ def MILP_without_MG(gisele_folder,case_study,n_clusters,coe,voltage,resistance,r
 
     # Voltage constraints
     def Voltage_balance_rule(model, i, j):
-        return (model.E[i] - model.E[j]) + model.x[i, j] - 1 <= model.dist[i, j] / 1000 * model.P[
+        return (model.E[i] - model.E[j]) + (model.x[i, j] - 1) * model.M <= model.dist[i, j] / 1000 * model.P[
             i, j] * model.Z / model.Z_ref
 
     model.Voltage_balance_rule = Constraint(model.links_decision, rule=Voltage_balance_rule)
 
     def Voltage_balance_rule2(model, i, j):
-        return (model.E[i] - model.E[j]) - model.x[i, j] + 1 >= model.dist[i, j] / 1000 * model.P[
+        return (model.E[i] - model.E[j]) + (- model.x[i, j] + 1)* model.M  >= model.dist[i, j] / 1000 * model.P[
             i, j] * model.Z / model.Z_ref
 
     model.Voltage_balance_rule2 = Constraint(model.links_decision, rule=Voltage_balance_rule2)
 
     def Voltage_balance_rule3(model, i, j):
-        return (model.E[i] - model.E[j]) + model.positive_p[i, j] - 1 <= model.dist[i, j] / 1000 * model.P[
+        return (model.E[i] - model.E[j]) + (model.positive_p[i, j] - 1)* model.M  <= model.dist[i, j] / 1000 * model.P[
             i, j] * model.Z / model.Z_ref
 
     model.Voltage_balance_rule3 = Constraint(model.links_clusters, rule=Voltage_balance_rule3)
 
     def Voltage_balance_rule4(model, i, j):
-        return (model.E[i] - model.E[j]) - model.positive_p[i, j] + 1 >= model.dist[i, j] / 1000 * model.P[
+        return (model.E[i] - model.E[j]) +(- model.positive_p[i, j] + 1)* model.M  >= model.dist[i, j] / 1000 * model.P[
             i, j] * model.Z / model.Z_ref
 
     model.Voltage_balance_rule4 = Constraint(model.links_clusters, rule=Voltage_balance_rule4)
@@ -211,36 +217,37 @@ def MILP_without_MG(gisele_folder,case_study,n_clusters,coe,voltage,resistance,r
         return model.PPS[i] <= model.PSmax[i] * model.k[i]
 
     model.PS_power_upper = Constraint(model.N_PS, rule=PS_power_rule_upper)
+    if distance_constraint:
+        #distance constraints
+        def distance_from_PS(model, i):
+            return model.Distance[i] <= -model.PS_distance[i]
 
-    def distance_from_PS(model, i):
-        return model.Distance[i] <= -model.PS_distance[i]
+        model.distance_from_PS = Constraint(model.N_PS, rule=distance_from_PS)
 
-    model.distance_from_PS = Constraint(model.N_PS, rule=distance_from_PS)
+        def distance_from_PS2(model, i):
+            return model.Distance[i] >= (model.k[i] - 1) * 200 - model.PS_distance[i] * model.k[i]
 
-    def distance_from_PS2(model, i):
-        return model.Distance[i] >= (model.k[i] - 1) * 200 - model.PS_distance[i] * model.k[i]
+        model.distance_from_PS2 = Constraint(model.N_PS, rule=distance_from_PS2)
 
-    model.distance_from_PS2 = Constraint(model.N_PS, rule=distance_from_PS2)
+        def distance_balance_decision(model, i, j):
+            return model.Distance[i] - model.Distance[j] + 1000 * (model.x[i, j] - 1) <= model.dist[i, j] / 1000
 
-    def distance_balance_decision(model, i, j):
-        return model.Distance[i] - model.Distance[j] + 1000 * (model.x[i, j] - 1) <= model.dist[i, j] / 1000
+        model.distance_balance_decision = Constraint(model.links_decision, rule=distance_balance_decision)
 
-    model.distance_balance_decision = Constraint(model.links_decision, rule=distance_balance_decision)
+        def distance_balance_decision2(model, i, j):
+            return (model.Distance[i] - model.Distance[j]) - 1000 * (model.x[i, j] - 1) >= model.dist[i, j] / 1000
 
-    def distance_balance_decision2(model, i, j):
-        return (model.Distance[i] - model.Distance[j]) - 1000 * (model.x[i, j] - 1) >= model.dist[i, j] / 1000
+        model.distance_balance_decision2 = Constraint(model.links_decision, rule=distance_balance_decision2)
 
-    model.distance_balance_decision2 = Constraint(model.links_decision, rule=distance_balance_decision2)
+        def distance_balance_clusters(model, i, j):
+            return model.Distance[i] - model.Distance[j] + 1000 * (model.positive_p[i, j] - 1) <= model.dist[i, j] / 1000
 
-    def distance_balance_clusters(model, i, j):
-        return model.Distance[i] - model.Distance[j] + 1000 * (model.positive_p[i, j] - 1) <= model.dist[i, j] / 1000
+        model.distance_balance_clusters = Constraint(model.links_clusters, rule=distance_balance_clusters)
 
-    model.distance_balance_clusters = Constraint(model.links_clusters, rule=distance_balance_clusters)
+        def distance_balance_clusters2(model, i, j):
+            return (model.Distance[i] - model.Distance[j]) - 1000 * (model.positive_p[i, j] - 1) >= model.dist[i, j] / 1000
 
-    def distance_balance_clusters2(model, i, j):
-        return (model.Distance[i] - model.Distance[j]) - 1000 * (model.positive_p[i, j] - 1) >= model.dist[i, j] / 1000
-
-    model.distance_balance_clusters2 = Constraint(model.links_clusters, rule=distance_balance_clusters2)
+        model.distance_balance_clusters2 = Constraint(model.links_clusters, rule=distance_balance_clusters2)
 
     def Balance_rule(model):
         return (sum(model.PPS[i] for i in model.N_PS) - sum(model.Psub[i] for i in model.N_clusters)) == 0
@@ -290,8 +297,10 @@ def MILP_without_MG(gisele_folder,case_study,n_clusters,coe,voltage,resistance,r
     subs = instance.k
     voltage = instance.E
     PS = instance.PPS
-    DISTANCE = instance.Distance
-
+    if distance_constraint:
+        DISTANCE = instance.Distance
+    else:
+        DISTANCE = instance.E
     links_clusters = instance.links_clusters
     # voltage_drop=instance.z
     connections_output = pd.DataFrame(columns=[['id1', 'id2', 'power']])
@@ -335,7 +344,10 @@ def MILP_without_MG(gisele_folder,case_study,n_clusters,coe,voltage,resistance,r
     k = 0
     for dist in DISTANCE:
         distance.loc[k, 'index'] = dist
-        distance.loc[k, 'length[m]'] = value(DISTANCE[dist])
+        if distance_constraint:
+            distance.loc[k, 'length[m]'] = value(DISTANCE[dist])
+        else:
+            distance.loc[k, 'length[m]'] = 0
         k = k + 1
     Links_Clusters.to_csv(MILP_output_folder + '/links_clusters.csv', index=False)
     connections_output.to_csv(MILP_output_folder + '/connections_output.csv', index=False)
@@ -1227,7 +1239,7 @@ def MILP_multiobjective(p_max_lines, coe, nation_emis, nation_rel, line_rel,inpu
     dist_output.to_csv('Output/LCOE/MV_dist_output.csv', index=False)
     return microgrids_output, connections_output
 
-def MILP_MG_noRel(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reactance,Pmax,line_cost):
+def MILP_MG_noRel(gisele_folder,case_study,n_clusters,coe,voltage,line1):
     model = AbstractModel()
     data = DataPortal()
     MILP_input_folder = gisele_folder + '/Case studies/' + case_study + '/Intermediate/Optimization/MILP_input'
@@ -1327,10 +1339,10 @@ def MILP_MG_noRel(gisele_folder,case_study,n_clusters,coe,voltage,resistance,rea
     model.A_ref = Param(initialize=Abase)
     model.E_min = Param(initialize=Vmin)
 
-    model.R_ref = Param(initialize=resistance)
-    model.X_ref = Param(initialize=reactance)
-    model.P_max = Param(initialize=Pmax)
-    model.cf = Param(initialize=line_cost)
+    model.R_ref = Param(initialize=line1['resistance'])
+    model.X_ref = Param(initialize=line1['reactance'])
+    model.P_max = Param(initialize=line1['Pmax'])
+    model.cf = Param(initialize=line1['line_cost'])
     #TODO make the powerfactor a variable.
     model.Z = Param(initialize=model.R_ref + model.X_ref * 0.5)
     model.Z_ref = Param(initialize=model.V_ref ** 2 / Abase)
@@ -1473,7 +1485,7 @@ def MILP_MG_noRel(gisele_folder,case_study,n_clusters,coe,voltage,resistance,rea
     print(coe)
     def ObjectiveFunction(model):
         # model.weights is in euro, model.coe is euro/MWh,
-        return summation(model.weights, model.x)  + summation(model.mg_cost, model.z) * 1000 + \
+        return summation(model.weights, model.x)*model.cf/10000  + summation(model.mg_cost, model.z) * 1000 + \
                sum(model.energy[i] * (1 - model.z[i]) for i in model.N_MG) * model.coe + summation(model.ps_cost,
                                                                                                    model.k)
         # +sum((model.P[i]/model.A_ref)**2*0.5*1.25*model.R_ref/model.Z_ref*model.dist[i]/1000*24*365*20 for i in model.links)
@@ -1488,7 +1500,7 @@ def MILP_MG_noRel(gisele_folder,case_study,n_clusters,coe,voltage,resistance,rea
     # opt = SolverFactory('cbc',executable=r'C:\Users\Asus\Desktop\POLIMI\Thesis\GISELE\Gisele_MILP\cbc')
     opt = SolverFactory('gurobi')
     # opt.options['numericfocus']=0
-    opt.options['mipgap'] = 0.02
+    opt.options['mipgap'] = 0.0175
     opt.options['presolve']=2
     # opt.options['mipfocus'] = 3
     print('Starting optimization process')
@@ -1556,7 +1568,7 @@ def MILP_MG_noRel(gisele_folder,case_study,n_clusters,coe,voltage,resistance,rea
     Voltages.to_csv(MILP_output_folder + '/Voltages.csv', index=False)
     all_lines.to_csv(MILP_output_folder + '/all_lines.csv', index=False)
     Microgrid.to_csv(MILP_output_folder + '/Microgrid.csv', index=False)
-
+    print('There are ' + str(int(Microgrid.iloc[:,1].sum()))+' microgrids selected. ')
     # k=0
     # for index in links:
     #     if int(round(value(links[index])))==1:
@@ -1566,634 +1578,8 @@ def MILP_MG_noRel(gisele_folder,case_study,n_clusters,coe,voltage,resistance,rea
     #         k=k+1
     # Voltage_drop.to_csv('MILP_results/solution_new/Voltage_drops.csv',index=False)
 
-def MILP_MG_2cables(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reactance,Pmax,line_cost,
-                    resistance2,reactance2,Pmax2,line_cost2):
 
-
-    ############ Create abstract model ###########
-    model = AbstractModel()
-    data = DataPortal()
-    MILP_input_folder = gisele_folder + '/Case studies/' + case_study + '/Intermediate/Optimization/MILP_input'
-    MILP_output_folder = gisele_folder + '/Case studies/' + case_study + '/Intermediate/Optimization/MILP_output'
-    os.chdir(MILP_input_folder)
-    # ####################Define sets#####################
-
-    # Define some basic parameter for the per unit conversion and voltage limitation
-    Abase = 1
-    Vmin = 0.9
-
-    # Name of all the nodes (primary and secondary substations)
-    model.N = Set()
-    data.load(filename='nodes.csv', set=model.N)  # first row is not read
-    model.N_clusters = Set()
-    data.load(filename='nodes_clusters.csv', set=model.N_clusters)
-    model.N_MG = Set()
-    data.load(filename='microgrids_nodes.csv', set=model.N_MG)
-    model.N_PS = Set()
-    data.load(filename='nodes_PS.csv', set=model.N_PS)
-    # Node corresponding to primary substation
-
-    # Allowed connections
-    model.links = Set(dimen=2)  # in the csv the values must be delimited by commas
-    data.load(filename='links_all.csv', set=model.links)
-
-    model.links_clusters = Set(dimen=2)
-    data.load(filename='links_clusters.csv', set=model.links_clusters)
-
-    model.links_decision = Set(dimen=2)
-    data.load(filename='links_decision.csv', set=model.links_decision)
-
-    # Nodes are divided into two sets, as suggested in https://pyomo.readthedocs.io/en/stable/pyomo_modeling_components/Sets.html:
-    # NodesOut[nodes] gives for each node all nodes that are connected to it via outgoing links
-    # NodesIn[nodes] gives for each node all nodes that are connected to it via ingoing links
-
-    def NodesOut_init(model, node):
-        retval = []
-        for (i, j) in model.links:
-            if i == node:
-                retval.append(j)
-        return retval
-
-    model.NodesOut = Set(model.N, initialize=NodesOut_init)
-
-    def NodesIn_init(model, node):
-        retval = []
-        for (i, j) in model.links:
-            if j == node:
-                retval.append(i)
-        return retval
-
-    model.NodesIn = Set(model.N, initialize=NodesIn_init)
-
-    #####################Define parameters#####################
-
-    # Electric power in the nodes (injected (-) or absorbed (+))
-    model.Psub = Param(model.N_clusters)
-    data.load(filename='power_nodes.csv', param=model.Psub)
-
-    # model.PS=Param(model.N)
-    # data.load(filename='PS.csv',param=model.PS)
-
-    model.microgrid_power = Param(model.N_MG)
-    data.load(filename='microgrids_powers.csv', param=model.microgrid_power)
-
-    model.energy = Param(model.N_MG)
-    data.load(filename='energy.csv', param=model.energy)
-
-    model.mg_cost = Param(model.N_MG)
-    data.load(filename='microgrids_costs.csv', param=model.mg_cost)
-
-    model.ps_cost = Param(model.N_PS)
-    data.load(filename='PS_costs.csv', param=model.ps_cost)
-
-    model.PSmax = Param(model.N_PS)
-    data.load(filename='PS_power_max.csv', param=model.PSmax)
-
-    model.PS_voltage = Param(model.N_PS)
-    data.load(filename='PS_voltage.csv', param=model.PS_voltage)
-
-    # Power of the primary substation as sum of all the other powers
-    # def PPS_init(model):
-    #    return sum(model.Psub[i] for i in model.N)
-    # model.PPS=Param(model.PS,initialize=PPS_init)
-
-    # Connection distance of all the edges
-    model.dist = Param(model.links)
-    data.load(filename='distances.csv', param=model.dist)
-
-    model.weights = Param(model.links_decision)
-    data.load(filename='weights_decision_lines.csv', param=model.weights)
-    # Electrical parameters of all the cables
-    model.V_ref = Param(initialize=voltage)
-    model.A_ref = Param(initialize=Abase)
-    model.E_min = Param(initialize=Vmin)
-
-    model.R_ref = Param(initialize=resistance)
-    model.R_ref2 = Param(initialize=resistance2)
-    model.X_ref = Param(initialize=reactance)
-    model.X_ref2 = Param(initialize = reactance2)
-    model.P_max = Param(initialize=Pmax)
-    model.P_max2 = Param(initialize = Pmax2)
-    model.cf = Param(initialize=line_cost)
-    model.cf2 = Param(initialize = line_cost2)
-
-    model.Z = Param(initialize=model.R_ref + model.X_ref * 0.5)
-    model.Z2 = Param(initialize = model.R_Ref2+model.X_ref2 * 0.5)
-    model.Z_ref = Param(initialize=model.V_ref ** 2 / Abase)
-
-    model.n_clusters = Param(initialize=n_clusters)
-    model.coe = Param(initialize=coe)
-
-
-    #####################Define variables#####################
-
-    # binary variable x[i,j]: 1 if the connection i,j is present, 0 otherwise
-    model.x = Var(model.links_decision, within=Binary)
-    model.x1 = Var(model.links_decision, within=Binary)
-    model.y = Var(model.links_clusters, within=Binary)
-    # x is if decision link is of cable type 1, x1 if it is of cable type 2. On the other hand, y is simply 1 decision variable
-    # since we know that it is chosen, we just want to know if it's the better cable or not. So, we consider that the base cable is the smaller one,
-    # and we just add the additional power availability, voltage drop and cost.
-    # power[i,j] is the power flow of connection i-j
-    model.P = Var(model.links)
-    # positive variables E(i) is p.u. voltage at each node
-    model.E = Var(model.N, within=NonNegativeReals)
-    # microgrid
-    model.z = Var(model.N_MG, within=Binary)
-    # binary variable k[i]: 1 if node i is a primary substation, 0 otherwise
-    model.k = Var(model.N_PS, within=Binary)
-    # Power output of Primary substation
-    model.PPS = Var(model.N_PS, within=NonNegativeReals)
-    model.MG_output = Var(model.N_MG)
-
-    model.delta_Pmax = model.P_max - model.P_max2
-    model.delta_Z = model.Z - model.Z2
-    model.delta_cf = model.cf - model.cf2
-
-    #####################Define constraints###############################
-    # def Make_problem_easy(model,i,j):
-    #    return model.x[i,j]+model.weights[i,j]>=1
-    # model.easy = Constraint(model.links, rule=Make_problem_easy)
-
-    def Radiality_rule(model):
-        # return summation(model.x)==len(model.N)-summation(model.k)
-        return summation(model.x) + summation(model.x1) == model.n_clusters
-
-    model.Radiality = Constraint(rule=Radiality_rule)
-
-    def Radiality_rule(model):
-        return summation(model.k) + summation(model.z) <= model.n_clusters
-
-    def Power_flow_conservation_rule(model, node):
-        return (sum(model.P[j, node] for j in model.NodesIn[node]) - sum(
-            model.P[node, j] for j in model.NodesOut[node])) == model.Psub[node]
-
-    model.Power_flow_conservation = Constraint(model.N_clusters, rule=Power_flow_conservation_rule)
-
-    def Power_flow_conservation_rule2(model, node):
-        return (sum(model.P[j, node] for j in model.NodesIn[node]) - sum(
-            model.P[node, j] for j in model.NodesOut[node])) == - model.MG_output[node]
-
-    model.Power_flow_conservation2 = Constraint(model.N_MG, rule=Power_flow_conservation_rule2)
-
-    def Power_flow_conservation_rule3(model, node):
-        return (sum(model.P[j, node] for j in model.NodesIn[node]) - sum(
-            model.P[node, j] for j in model.NodesOut[node])) == - model.PPS[node]
-
-    model.Power_flow_conservation3 = Constraint(model.N_PS, rule=Power_flow_conservation_rule3)
-
-    def Power_upper_decision(model, i, j):
-        return model.P[i, j] <= model.P_max * model.x[i, j] + model.P_max2 * model.x1[i, j]
-
-    model.Power_upper_decision = Constraint(model.links_decision, rule=Power_upper_decision)
-
-    def Power_lower_decision(model, i, j):
-        return model.P[i, j] >= -model.P_max * model.x[i, j] - model.P_max2 * model.x1[i, j]
-
-    model.Power_lower_decision = Constraint(model.links_decision, rule=Power_lower_decision)
-
-    def Power_upper_clusters(model, i, j):
-        return model.P[i, j] <= model.P_max2 + model.y[i, j] * model.delta_Pmax
-
-    model.Power_upper_clusters = Constraint(model.links_clusters, rule=Power_upper_clusters)
-
-    def Power_lower_clusters(model, i, j):
-        return model.P[i, j] >= -model.P_max2 - model.y[i, j] * model.delta_Pmax
-
-    model.Power_lower_clusters = Constraint(model.links_clusters, rule=Power_lower_clusters)
-
-    # Voltage constraints
-    def Voltage_balance_rule(model, i, j):
-        return (model.E[i] - model.E[j]) + model.x[i, j] - 1 <= model.dist[i, j] / 1000 * model.P[
-            i, j] * model.Z / model.Z_ref
-
-    model.Voltage_balance_rule = Constraint(model.links_decision, rule=Voltage_balance_rule)
-
-    def Voltage_balance_rule11(model, i, j):
-        return (model.E[i] - model.E[j]) + model.x1[i, j] - 1 <= model.dist[i, j] / 1000 * model.P[
-            i, j] * model.Z2 / model.Z_ref
-
-    model.Voltage_balance_rule11 = Constraint(model.links_decision, rule=Voltage_balance_rule11)
-
-    def Voltage_balance_rule2(model, i, j):
-        return (model.E[i] - model.E[j]) - model.x[i, j] + 1 >= model.dist[i, j] / 1000 * model.P[
-            i, j] * model.Z / model.Z_ref
-
-    model.Voltage_balance_rule2 = Constraint(model.links_decision, rule=Voltage_balance_rule2)
-
-    def Voltage_balance_rule22(model, i, j):
-        return (model.E[i] - model.E[j]) - model.x1[i, j] + 1 >= model.dist[i, j] / 1000 * model.P[
-            i, j] * model.Z2 / model.Z_ref
-
-    model.Voltage_balance_rule22 = Constraint(model.links_decision, rule=Voltage_balance_rule22)
-
-    def Voltage_balance_rule3(model, i, j):
-        return (model.E[i] - model.E[j]) + model.y[i, j] - 1 <= model.dist[i, j] / 1000 * model.P[
-            i, j] * model.Z / model.Z_ref
-
-    model.Voltage_balance_rule3 = Constraint(model.links_clusters, rule=Voltage_balance_rule3)
-
-    def Voltage_balance_rule33(model, i, j):
-        return (model.E[i] - model.E[j]) - model.y[i, j] <= model.dist[i, j] / 1000 * model.P[
-            i, j] * model.Z2 / model.Z_ref
-
-    model.Voltage_balance_rule33 = Constraint(model.links_clusters, rule=Voltage_balance_rule33)
-
-    def Voltage_balance_rule4(model, i, j):
-        return (model.E[i] - model.E[j]) - model.y[i, j] + 1 >= model.dist[i, j] / 1000 * model.P[
-            i, j] * model.Z / model.Z_ref
-
-    model.Voltage_balance_rule4 = Constraint(model.links_clusters, rule=Voltage_balance_rule4)
-
-    def Voltage_balance_rule44(model, i, j):
-        return (model.E[i] - model.E[j]) + model.y[i, j] >= model.dist[i, j] / 1000 * model.P[
-            i, j] * model.Z2 / model.Z_ref
-
-    model.Voltage_balance_rule44 = Constraint(model.links_clusters, rule=Voltage_balance_rule44)
-
-    def Voltage_limit(model, i):
-        return model.E[i] >= model.k[i] * (model.PS_voltage[i] - model.E_min) + model.E_min
-
-    model.Voltage_limit = Constraint(model.N_PS, rule=Voltage_limit)
-
-    def Voltage_PS2(model, i):
-        return model.E[i] <= model.PS_voltage[i]
-
-    model.Voltage_PS2 = Constraint(model.N_PS, rule=Voltage_PS2)
-
-    def Voltage_limit_MG(model, i):
-        return model.E[i] <= 1
-
-    model.Voltage_limit_MG = Constraint(model.N_MG, rule=Voltage_limit_MG)
-
-    def Voltage_limit_MG2(model, i):
-        return model.E[i] >= model.z[i] * (1 - model.E_min) + model.E_min
-
-    model.Voltage_limit_MG2 = Constraint(model.N_MG, rule=Voltage_limit_MG2)
-
-
-    def Voltage_limit_clusters2(model, i):
-        return model.E[i] >= model.E_min
-
-    model.Voltage_limit_clusters2 = Constraint(model.N_clusters, rule=Voltage_limit_clusters2)
-
-    def PS_power_rule_upper(model, i):
-        return model.PPS[i] <= model.PSmax[i] * model.k[i]
-
-    model.PS_power_upper = Constraint(model.N_PS, rule=PS_power_rule_upper)
-
-    def Balance_rule(model):
-        return (sum(model.PPS[i] for i in model.N_PS) + sum(model.MG_output[i] for i in model.N_MG) - sum(
-            model.Psub[i] for i in model.N_clusters)) == 0
-
-    model.Balance = Constraint(rule=Balance_rule)
-
-    def anti_paralel(model, i, j):
-        return model.x[i, j] + model.x1[i, j] <= 1
-
-    model.anti_paralel = Constraint(model.links_decision, rule=anti_paralel)
-
-    def MG_power_limit(model, i):
-        return model.MG_output[i] == model.z[i] * model.microgrid_power[i]
-
-    model.MG_power_limit = Constraint(model.N_MG, rule=MG_power_limit)
-
-    ####################Define objective function##########################
-
-    def ObjectiveFunction(model):
-        # return summation(model.weights, model.x) * model.cf / 1000 + summation(model.weights, model.x1) * model.cf2 / 10000
-        return summation(model.weights, model.x) * model.cf / 10000 + summation(model.mg_cost, model.z) * 1000 + sum(
-            model.energy[i] * (1 - model.z[i]) for i in model.N_MG) * model.coe \
-               + summation(model.ps_cost, model.k) + summation(model.weights, model.x1) * model.cf2 / 10000 + sum(
-            model.y[i] for i in model.links_clusters) * model.delta_cf
-
-    model.Obj = Objective(rule=ObjectiveFunction, sense=minimize)
-
-    #############Solve model##################
-
-    instance = model.create_instance(data)
-    print('Instance is constructed:', instance.is_constructed())
-    # opt = SolverFactory('cbc',executable=r'C:\Users\Asus\Desktop\POLIMI\Thesis\GISELE\Gisele_MILP\cbc')
-    opt = SolverFactory('gurobi')
-    # opt.options['numericfocus']=0
-    opt.options['mipgap'] = 0.01
-    opt.options['presolve'] = 2
-    # opt.options['mipfocus']=2
-    # opt = SolverFactory('cbc',executable=r'C:\Users\Asus\Desktop\POLIMI\Thesis\GISELE\New folder\cbc')
-    print('Starting optimization process')
-    time_i = datetime.now()
-    opt.solve(instance, tee=True, symbolic_solver_labels=True)
-    time_f = datetime.now()
-    print('Time required for optimization is', time_f - time_i)
-    links = instance.x
-    links_small = instance.x1
-    power = instance.P
-    subs = instance.k
-    voltage = instance.E
-    PS = instance.PPS
-    mg_output = instance.MG_output
-    microGrid = instance.z
-    links_clusters_type = instance.y
-    links_clusters = instance.links_clusters
-    # voltage_drop=instance.z
-    connections_output = pd.DataFrame(columns=[['id1', 'id2', 'power', 'Type']])
-    PrSubstation = pd.DataFrame(columns=[['index', 'power']])
-    all_lines = pd.DataFrame(columns=[['id1', 'id2', 'power']])
-    Voltages = pd.DataFrame(columns=[['index', 'voltage [p.u]']])
-    Microgrid = pd.DataFrame(columns=[['index', 'microgrid', 'power']])
-    Links_Clusters = pd.DataFrame(columns=[['id1', 'id2', 'power', 'Type']])
-    k = 0
-    for index in links:
-        if int(round(value(links[index]))) == 1:
-            connections_output.loc[k, 'id1'] = index[0]
-            connections_output.loc[k, 'id2'] = index[1]
-            connections_output.loc[k, 'power'] = value(power[index])
-            connections_output.loc[k, 'Type'] = 'Large'
-            k = k + 1
-        elif int(round(value(links_small[index]))) == 1:
-            connections_output.loc[k, 'id1'] = index[0]
-            connections_output.loc[k, 'id2'] = index[1]
-            connections_output.loc[k, 'power'] = value(power[index])
-            connections_output.loc[k, 'Type'] = 'Small'
-            k = k + 1
-    k = 0
-    for index in subs:
-        if int(round(value(subs[index]))) == 1:
-            PrSubstation.loc[k, 'index'] = index
-            PrSubstation.loc[k, 'power'] = value(PS[index])
-            print(((value(PS[index]))))
-            k = k + 1
-    k = 0
-    for v in voltage:
-        Voltages.loc[k, 'index'] = v
-        Voltages.loc[k, 'voltage [p.u]'] = value(voltage[v])
-        k = k + 1
-    k = 0
-    for index in power:
-        all_lines.loc[k, 'id1'] = index[0]
-        all_lines.loc[k, 'id2'] = index[1]
-        all_lines.loc[k, 'power'] = value(power[index])
-        k = k + 1
-    k = 0
-    for index in mg_output:
-        Microgrid.loc[k, 'index'] = index
-        Microgrid.loc[k, 'microgrid'] = value(microGrid[index])
-        Microgrid.loc[k, 'power'] = value(mg_output[index])
-        k = k + 1
-    k = 0
-    for index in links_clusters:
-        print(index)
-        Links_Clusters.loc[k, 'id1'] = index[0]
-        Links_Clusters.loc[k, 'id2'] = index[1]
-        Links_Clusters.loc[k, 'power'] = value(power[index])
-        if int(round(value(links_clusters_type[index]))) == 1:
-            Links_Clusters.loc[k, 'Type'] = 'Large'
-        else:
-            Links_Clusters.loc[k, 'Type'] = 'Small'
-        k = k + 1
-
-    Links_Clusters.to_csv(MILP_output_folder + '/links_clusters.csv', index=False)
-    connections_output.to_csv(MILP_output_folder + '/connections_output.csv', index=False)
-    PrSubstation.to_csv(MILP_output_folder + '/PrimarySubstations.csv', index=False)
-    Voltages.to_csv(MILP_output_folder + '/Voltages.csv', index=False)
-    all_lines.to_csv(MILP_output_folder + '/all_lines.csv', index=False)
-    Microgrid.to_csv(MILP_output_folder + '/Microgrid.csv', index=False)
-
-    # k=0
-    # for index in links:
-    #     if int(round(value(links[index])))==1:
-    #         Voltage_drop.loc[k,'id1']=index[0]
-    #         Voltage_drop.loc[k,'id2']=index[1]
-    #         Voltage_drop.loc[k,'v_drop']=value(voltage_drop[index])
-    #         k=k+1
-    # Voltage_drop.to_csv('MILP_results/solution_new/Voltage_drops.csv',index=False)
-
-def MILP_base_no_voltage(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reactance,Pmax,line_cost):
-    ############ Create abstract model ###########
-    model = AbstractModel()
-    data = DataPortal()
-    MILP_input_folder = gisele_folder + '/Case studies/' + case_study + '/Intermediate/Optimization/MILP_input'
-    MILP_output_folder = gisele_folder + '/Case studies/' + case_study + '/Intermediate/Optimization/MILP_output'
-    os.chdir(MILP_input_folder)
-
-    # Define some basic parameter for the per unit conversion and voltage limitation
-    Abase = 1
-    Vmin = 0.9
-
-    ####################Define sets#####################
-    model.N = Set()
-    data.load(filename='nodes.csv', set=model.N)  # first row is not read
-    model.N_clusters = Set()
-    data.load(filename='nodes_clusters.csv', set=model.N_clusters)
-    model.N_PS = Set()
-    data.load(filename='nodes_PS.csv', set=model.N_PS)
-    # Node corresponding to primary substation
-
-    # Allowed connections
-    model.links = Set(dimen=2)  # in the csv the values must be delimited by commas
-    data.load(filename='links_all.csv', set=model.links)
-
-    model.links_clusters = Set(dimen=2)
-    data.load(filename='links_clusters.csv', set=model.links_clusters)
-
-    model.links_decision = Set(dimen=2)
-    data.load(filename='links_decision.csv', set=model.links_decision)
-    # Connection distance of all the edges
-    model.dist = Param(model.links)
-    data.load(filename='distances.csv', param=model.dist)
-    # Nodes are divided into two sets, as suggested in https://pyomo.readthedocs.io/en/stable/pyomo_modeling_components/Sets.html:
-    # NodesOut[nodes] gives for each node all nodes that are connected to it via outgoing links
-    # NodesIn[nodes] gives for each node all nodes that are connected to it via ingoing links
-
-    def NodesOut_init(model, node):
-        retval = []
-        for (i, j) in model.links:
-            if i == node:
-                retval.append(j)
-        return retval
-
-    model.NodesOut = Set(model.N, initialize=NodesOut_init)
-
-    def NodesIn_init(model, node):
-        retval = []
-        for (i, j) in model.links:
-            if j == node:
-                retval.append(i)
-        return retval
-
-    model.NodesIn = Set(model.N, initialize=NodesIn_init)
-
-    #####################Define parameters#####################
-
-    # Electric power in the nodes (injected (-) or absorbed (+))
-    model.Psub = Param(model.N_clusters)
-    data.load(filename='power_nodes.csv', param=model.Psub)
-
-    model.ps_cost = Param(model.N_PS)
-    data.load(filename='PS_costs.csv', param=model.ps_cost)
-
-    model.PSmax = Param(model.N_PS)
-    data.load(filename='PS_power_max.csv', param=model.PSmax)
-
-
-    model.weights = Param(model.links_decision)
-    data.load(filename='weights_decision_lines.csv', param=model.weights)
-    # Electrical parameters of all the cables
-    model.V_ref = Param(initialize=voltage)
-    model.A_ref = Param(initialize=Abase)
-    model.E_min = Param(initialize=Vmin)
-
-    model.R_ref = Param(initialize=resistance)
-    model.X_ref = Param(initialize=reactance)
-    model.P_max = Param(initialize=Pmax)
-    model.cf = Param(initialize=line_cost)
-
-    model.Z = Param(initialize=model.R_ref + model.X_ref * 0.5)
-    model.Z_ref = Param(initialize=model.V_ref ** 2 / Abase)
-
-    model.n_clusters = Param(initialize=n_clusters)
-    model.coe = Param(initialize=coe)
-
-    #####################Define variables#####################
-
-    # binary variable x[i,j]: 1 if the connection i,j is present, 0 otherwise
-    model.x = Var(model.links_decision, within=Binary)
-    # power[i,j] is the power flow of connection i-j
-    model.P = Var(model.links)
-
-    # binary variable k[i]: 1 if node i is a primary substation, 0 otherwise
-    model.k = Var(model.N_PS, within=Binary)
-    # Power output of Primary substation
-    model.PPS = Var(model.N_PS, within=NonNegativeReals)
-    model.cable_type = Var(model.links)
-
-    #####################Define constraints###############################
-
-    # Radiality constraint
-    def Radiality_rule(model):
-        return summation(model.x) == model.n_clusters
-
-    model.Radiality = Constraint(rule=Radiality_rule)
-
-    # Power flow constraints
-    def Power_flow_conservation_rule(model, node):
-        return (sum(model.P[j, node] for j in model.NodesIn[node]) - sum(
-            model.P[node, j] for j in model.NodesOut[node])) == model.Psub[node]
-
-    model.Power_flow_conservation = Constraint(model.N_clusters, rule=Power_flow_conservation_rule)
-
-    def Power_flow_conservation_rule3(model, node):
-        return (sum(model.P[j, node] for j in model.NodesIn[node]) - sum(
-            model.P[node, j] for j in model.NodesOut[node])) == - model.PPS[node]
-
-    model.Power_flow_conservation3 = Constraint(model.N_PS, rule=Power_flow_conservation_rule3)
-
-    def Power_upper_decision(model, i, j):
-        return model.P[i, j] <= model.P_max * model.x[i, j]
-
-    model.Power_upper_decision = Constraint(model.links_decision, rule=Power_upper_decision)
-
-    def Power_lower_decision(model, i, j):
-        return model.P[i, j] >= -model.P_max * model.x[i, j]
-
-    model.Power_lower_decision = Constraint(model.links_decision, rule=Power_lower_decision)
-    def Power_upper_cluster(model, i, j):
-        return model.P[i, j] <= model.P_max
-
-    model.Power_upper_cluster = Constraint(model.links_clusters, rule=Power_upper_cluster)
-
-    def Power_lower_cluster(model, i, j):
-        return model.P[i, j] >= -model.P_max
-
-    model.Power_lower_cluster= Constraint(model.links_clusters, rule=Power_lower_cluster)
-
-
-    def PS_power_rule_upper(model, i):
-        return model.PPS[i] <= model.PSmax[i] * model.k[i]
-
-    model.PS_power_upper = Constraint(model.N_PS, rule=PS_power_rule_upper)
-
-    def Balance_rule(model):
-        return (sum(model.PPS[i] for i in model.N_PS) - sum(model.Psub[i] for i in model.N_clusters)) == 0
-
-    model.Balance = Constraint(rule=Balance_rule)
-
-    ####################Define objective function##########################
-
-    ####################Define objective function##########################
-    reliability_index = 1000
-
-    def ObjectiveFunction(model):
-        return summation(model.weights, model.x) * model.cf / 1000 + summation(model.ps_cost, model.k)
-
-        # return summation(model.weights, model.x) * model.cf / 1000  + summation(model.ps_cost,model.k) - sum(model.Psub[i]*model.Distance[i] for i in model.N_clusters)*reliability_index
-
-    model.Obj = Objective(rule=ObjectiveFunction, sense=minimize)
-
-    #############Solve model##################
-
-    instance = model.create_instance(data)
-    print('Instance is constructed:', instance.is_constructed())
-    # opt = SolverFactory('cbc',executable=r'C:\Users\Asus\Desktop\POLIMI\Thesis\GISELE\Gisele_MILP\cbc')
-    opt = SolverFactory('gurobi')
-    opt.options['TimeLimit'] = 300
-    # opt.options['numericfocus']=0
-    # opt.options['mipgap'] = 0.0002
-    # opt.options['presolve']=2
-    # opt.options['mipfocus']=2
-    # opt = SolverFactory('cbc',executable=r'C:\Users\Asus\Desktop\POLIMI\Thesis\GISELE\New folder\cbc')
-    print('Starting optimization process')
-    time_i = datetime.now()
-    opt.solve(instance, tee=True, symbolic_solver_labels=True)
-    time_f = datetime.now()
-    print('Time required for optimization is', time_f - time_i)
-    links = instance.x
-    power = instance.P
-    subs = instance.k
-    PS = instance.PPS
-
-
-    links_clusters = instance.links_clusters
-    # voltage_drop=instance.z
-    connections_output = pd.DataFrame(columns=[['id1', 'id2', 'power']])
-    PrSubstation = pd.DataFrame(columns=[['index', 'power']])
-    all_lines = pd.DataFrame(columns=[['id1', 'id2', 'power']])
-    Links_Clusters = pd.DataFrame(columns=[['id1', 'id2', 'power']])
-
-    k = 0
-    for index in links:
-        if int(round(value(links[index]))) == 1:
-            connections_output.loc[k, 'id1'] = index[0]
-            connections_output.loc[k, 'id2'] = index[1]
-            connections_output.loc[k, 'power'] = value(power[index])
-            k = k + 1
-    k = 0
-    for index in subs:
-        if int(round(value(subs[index]))) == 1:
-            PrSubstation.loc[k, 'index'] = index
-            PrSubstation.loc[k, 'power'] = value(PS[index])
-            print(((value(PS[index]))))
-            k = k + 1
-
-    for index in power:
-        all_lines.loc[k, 'id1'] = index[0]
-        all_lines.loc[k, 'id2'] = index[1]
-        all_lines.loc[k, 'power'] = value(power[index])
-        k = k + 1
-    k = 0
-
-    for index in links_clusters:
-        Links_Clusters.loc[k, 'id1'] = index[0]
-        Links_Clusters.loc[k, 'id2'] = index[1]
-        Links_Clusters.loc[k, 'power'] = value(power[index])
-        k = k + 1
-
-    Links_Clusters.to_csv(MILP_output_folder + '/links_clusters.csv', index=False)
-    connections_output.to_csv(MILP_output_folder + '/connections_output.csv', index=False)
-    PrSubstation.to_csv(MILP_output_folder + '/PrimarySubstations.csv', index=False)
-    all_lines.to_csv(MILP_output_folder + '/all_lines.csv', index=False)
-
-def MILP_base(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reactance,Pmax,line_cost):
+def MILP_base(gisele_folder,case_study,n_clusters,coe,voltage,line1):
     ############ Create abstract model ###########
     model = AbstractModel()
     data = DataPortal()
@@ -2271,10 +1657,10 @@ def MILP_base(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reactan
     model.A_ref = Param(initialize=Abase)
     model.E_min = Param(initialize=Vmin)
 
-    model.R_ref = Param(initialize=resistance)
-    model.X_ref = Param(initialize=reactance)
-    model.P_max = Param(initialize=Pmax)
-    model.cf = Param(initialize=line_cost)
+    model.R_ref = Param(initialize=line1['resistance'])
+    model.X_ref = Param(initialize=line1['reactance'])
+    model.P_max = Param(initialize=line1['Pmax'])
+    model.cf = Param(initialize=line1['line_cost'])
 
     model.Z = Param(initialize=model.R_ref + model.X_ref * 0.5)
     model.Z_ref = Param(initialize=model.V_ref ** 2 / Abase)
@@ -2296,8 +1682,7 @@ def MILP_base(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reactan
     # Power output of Primary substation
     model.PPS = Var(model.N_PS, within=NonNegativeReals)
     model.cable_type = Var(model.links)
-    model.Mmax = Param(initialize = 1000)
-    model.Mmin=Param(initialize = -1000)
+    model.M= Param(initialize = 1)
     #####################Define constraints###############################
 
     # Radiality constraint
@@ -2340,27 +1725,31 @@ def MILP_base(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reactan
     if voltage_constraint == True:
         # Voltage constraints
         def Voltage_balance_rule(model, i, j):
-            return (model.E[i] - model.E[j]) + (model.x[i, j] - 1)*1000 <= model.dist[i, j] / 1000 * model.P[
+            return (model.E[i] - model.E[j]) + (model.x[i, j] - 1)*model.M <= model.dist[i, j] / 1000 * model.P[
                 i, j] * model.Z / model.Z_ref
 
         model.Voltage_balance_rule = Constraint(model.links_decision, rule=Voltage_balance_rule)
 
         def Voltage_balance_rule2(model, i, j):
-            return (model.E[i] - model.E[j]) +(- model.x[i, j] + 1)*1000 >= model.dist[i, j] / 1000 * model.P[
+            return (model.E[i] - model.E[j]) +(- model.x[i, j] + 1)*model.M >= model.dist[i, j] / 1000 * model.P[
                 i, j] * model.Z / model.Z_ref
 
         model.Voltage_balance_rule2 = Constraint(model.links_decision, rule=Voltage_balance_rule2)
 
+        #def Voltage_balance_rule3(model, i, j):
+        #    return (model.E[i] - model.E[j]) <= model.dist[i, j] / 1000 * model.P[i, j] * model.Z / model.Z_ref
+
+        #model.Voltage_balance_rule3 = Constraint(model.links_clusters, rule=Voltage_balance_rule3)
+
+        #def Voltage_balance_rule4(model, i, j):
+        #    return (model.E[i] - model.E[j]) >= model.dist[i, j] / 1000 * model.P[i, j] * model.Z / model.Z_ref
+
+        #model.Voltage_balance_rule4 = Constraint(model.links_clusters, rule=Voltage_balance_rule4)
+
         def Voltage_balance_rule3(model, i, j):
-            return (model.E[i] - model.E[j]) <= model.dist[i, j] / 1000 * model.P[i, j] * model.Z / model.Z_ref
+            return (model.E[i] - model.E[j]) == model.dist[i, j] / 1000 * model.P[i, j] * model.Z / model.Z_ref
 
         model.Voltage_balance_rule3 = Constraint(model.links_clusters, rule=Voltage_balance_rule3)
-
-        def Voltage_balance_rule4(model, i, j):
-            return (model.E[i] - model.E[j]) >= model.dist[i, j] / 1000 * model.P[i, j] * model.Z / model.Z_ref
-
-        model.Voltage_balance_rule4 = Constraint(model.links_clusters, rule=Voltage_balance_rule4)
-
 
 
         def Voltage_limit(model, i):
@@ -2402,10 +1791,11 @@ def MILP_base(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reactan
     #############Solve model##################
 
     instance = model.create_instance(data)
+    instance.write("mymodel.lp")
     print('Instance is constructed:', instance.is_constructed())
     # opt = SolverFactory('cbc',executable=r'C:\Users\Asus\Desktop\POLIMI\Thesis\GISELE\Gisele_MILP\cbc')
     opt = SolverFactory('gurobi')
-    opt.options['TimeLimit'] = 300
+    opt.options['TimeLimit'] = 600
     # opt.options['numericfocus']=0
     opt.options['mipgap'] = 0.01
     opt.options['presolve']=2
@@ -3164,10 +2554,10 @@ def MILP_base_losses2(gisele_folder,case_study,n_clusters,coe,voltage,resistance
     Voltages.to_csv(MILP_output_folder + '/Voltages.csv', index=False)
     all_lines.to_csv(MILP_output_folder + '/all_lines.csv', index=False)
 
-def MILP_2cables(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reactance,Pmax,line_cost,
-                    resistance2,reactance2,Pmax2,line_cost2):
+def MILP_2cables(gisele_folder,case_study,n_clusters,coe,voltage,line1,line2):
 
-
+    voltage_constraint = False
+    print('voltage is off')
     ############ Create abstract model ###########
     model = AbstractModel()
     data = DataPortal()
@@ -3239,40 +2629,32 @@ def MILP_2cables(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reac
     model.PSmax = Param(model.N_PS)
     data.load(filename='PS_power_max.csv', param=model.PSmax)
 
-    model.PS_voltage = Param(model.N_PS)
-    data.load(filename='PS_voltage.csv', param=model.PS_voltage)
+
 
     # Power of the primary substation as sum of all the other powers
     # def PPS_init(model):
     #    return sum(model.Psub[i] for i in model.N)
     # model.PPS=Param(model.PS,initialize=PPS_init)
 
-    # Connection distance of all the edges
+    # Connection length of all the edges
     model.dist = Param(model.links)
     data.load(filename='distances.csv', param=model.dist)
 
     model.weights = Param(model.links_decision)
     data.load(filename='weights_decision_lines.csv', param=model.weights)
     # Electrical parameters of all the cables
-    model.V_ref = Param(initialize=voltage)
-    model.A_ref = Param(initialize=Abase)
-    model.E_min = Param(initialize=Vmin)
+    model.weights_clusters = Param(model.links_clusters)
+    data.load(filename='weights_clusters.csv', param=model.weights_clusters)
 
-    model.R_ref = Param(initialize=resistance)
-    model.R_ref2 = Param(initialize=resistance2)
-    model.X_ref = Param(initialize=reactance)
-    model.X_ref2 = Param(initialize = reactance2)
-    model.P_max = Param(initialize=Pmax)
-    model.P_max2 = Param(initialize = Pmax2)
-    model.cf = Param(initialize=line_cost)
-    model.cf2 = Param(initialize = line_cost2)
+    model.P_max = Param(initialize=line1['Pmax'])
+    model.P_max2 = Param(initialize = line2['Pmax'])
+    model.cf = Param(initialize=line1['line_cost'])
+    model.cf2 = Param(initialize =line2['line_cost'])
 
-    model.Z = Param(initialize=model.R_ref + model.X_ref * 0.5)
-    model.Z2 = Param(initialize = model.R_ref2+model.X_ref2 * 0.5)
-    model.Z_ref = Param(initialize=model.V_ref ** 2 / Abase)
+
 
     model.n_clusters = Param(initialize=n_clusters)
-    model.coe = Param(initialize=coe)
+
 
 
     #####################Define variables#####################
@@ -3287,8 +2669,22 @@ def MILP_2cables(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reac
     # power[i,j] is the power flow of connection i-j
     model.P = Var(model.links)
     # positive variables E(i) is p.u. voltage at each node
-    model.E = Var(model.N, within=NonNegativeReals)
+    if voltage_constraint:
+        model.V_ref = Param(initialize=voltage)
+        model.A_ref = Param(initialize=Abase)
+        model.E = Var(model.N, within=NonNegativeReals)
+        model.R_ref = Param(initialize=line1['resistance'])
+        model.R_ref2 = Param(initialize=line2['resistance'])
+        model.X_ref = Param(initialize=line1['reactance'])
+        model.X_ref2 = Param(initialize=line2['reactance'])
+        model.Z = Param(initialize=model.R_ref + model.X_ref * 0.5)
+        model.Z2 = Param(initialize=model.R_ref2 + model.X_ref2 * 0.5)
+        model.Z_ref = Param(initialize=model.V_ref ** 2 / Abase)
 
+        model.E_min = Param(initialize=Vmin)
+        model.PS_voltage = Param(model.N_PS)
+        data.load(filename='PS_voltage.csv', param=model.PS_voltage)
+        model.delta_Z = model.Z - model.Z2
     # binary variable k[i]: 1 if node i is a primary substation, 0 otherwise
     model.k = Var(model.N_PS, within=Binary)
     # Power output of Primary substation
@@ -3296,9 +2692,9 @@ def MILP_2cables(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reac
 
 
     model.delta_Pmax = model.P_max - model.P_max2
-    model.delta_Z = model.Z - model.Z2
-    model.delta_cf = model.cf - model.cf2
 
+    model.delta_cf = model.cf - model.cf2
+    model.M = 10
     #####################Define constraints###############################
     # def Make_problem_easy(model,i,j):
     #    return model.x[i,j]+model.weights[i,j]>=1
@@ -3344,71 +2740,70 @@ def MILP_2cables(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reac
 
     model.Power_lower_clusters = Constraint(model.links_clusters, rule=Power_lower_clusters)
 
-    # Voltage constraints
-    def Voltage_balance_rule(model, i, j):
-        return (model.E[i] - model.E[j]) + model.x[i, j] - 1 <= model.dist[i, j] / 1000 * model.P[
-            i, j] * model.Z / model.Z_ref
+    if voltage_constraint:
+        # Voltage constraints
+        def Voltage_balance_rule(model, i, j):
+            return (model.E[i] - model.E[j]) + (model.x[i, j] - 1)*model.M <= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z / model.Z_ref
 
-    model.Voltage_balance_rule = Constraint(model.links_decision, rule=Voltage_balance_rule)
+        model.Voltage_balance_rule = Constraint(model.links_decision, rule=Voltage_balance_rule)
 
-    def Voltage_balance_rule11(model, i, j):
-        return (model.E[i] - model.E[j]) + model.x1[i, j] - 1 <= model.dist[i, j] / 1000 * model.P[
-            i, j] * model.Z2 / model.Z_ref
+        def Voltage_balance_rule11(model, i, j):
+            return (model.E[i] - model.E[j]) + (model.x1[i, j] - 1)*model.M <= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z2 / model.Z_ref
 
-    model.Voltage_balance_rule11 = Constraint(model.links_decision, rule=Voltage_balance_rule11)
+        model.Voltage_balance_rule11 = Constraint(model.links_decision, rule=Voltage_balance_rule11)
 
-    def Voltage_balance_rule2(model, i, j):
-        return (model.E[i] - model.E[j]) - model.x[i, j] + 1 >= model.dist[i, j] / 1000 * model.P[
-            i, j] * model.Z / model.Z_ref
+        def Voltage_balance_rule2(model, i, j):
+            return (model.E[i] - model.E[j]) + (- model.x[i, j] + 1)*model.M >= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z / model.Z_ref
 
-    model.Voltage_balance_rule2 = Constraint(model.links_decision, rule=Voltage_balance_rule2)
+        model.Voltage_balance_rule2 = Constraint(model.links_decision, rule=Voltage_balance_rule2)
 
-    def Voltage_balance_rule22(model, i, j):
-        return (model.E[i] - model.E[j]) - model.x1[i, j] + 1 >= model.dist[i, j] / 1000 * model.P[
-            i, j] * model.Z2 / model.Z_ref
+        def Voltage_balance_rule22(model, i, j):
+            return (model.E[i] - model.E[j]) + (- model.x1[i, j] + 1)*model.M >= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z2 / model.Z_ref
 
-    model.Voltage_balance_rule22 = Constraint(model.links_decision, rule=Voltage_balance_rule22)
+        model.Voltage_balance_rule22 = Constraint(model.links_decision, rule=Voltage_balance_rule22)
 
-    def Voltage_balance_rule3(model, i, j):
-        return (model.E[i] - model.E[j]) + model.y[i, j] - 1 <= model.dist[i, j] / 1000 * model.P[
-            i, j] * model.Z / model.Z_ref
+        def Voltage_balance_rule3(model, i, j):
+            return (model.E[i] - model.E[j]) + (model.y[i, j] - 1)*model.M <= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z / model.Z_ref
 
-    model.Voltage_balance_rule3 = Constraint(model.links_clusters, rule=Voltage_balance_rule3)
+        model.Voltage_balance_rule3 = Constraint(model.links_clusters, rule=Voltage_balance_rule3)
 
-    def Voltage_balance_rule33(model, i, j):
-        return (model.E[i] - model.E[j]) - model.y[i, j] <= model.dist[i, j] / 1000 * model.P[
-            i, j] * model.Z2 / model.Z_ref
+        def Voltage_balance_rule33(model, i, j):
+            return (model.E[i] - model.E[j]) -model.y[i, j]*model.M <= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z2 / model.Z_ref
 
-    model.Voltage_balance_rule33 = Constraint(model.links_clusters, rule=Voltage_balance_rule33)
+        model.Voltage_balance_rule33 = Constraint(model.links_clusters, rule=Voltage_balance_rule33)
 
-    def Voltage_balance_rule4(model, i, j):
-        return (model.E[i] - model.E[j]) - model.y[i, j] + 1 >= model.dist[i, j] / 1000 * model.P[
-            i, j] * model.Z / model.Z_ref
+        def Voltage_balance_rule4(model, i, j):
+            return (model.E[i] - model.E[j]) + (- model.y[i, j] + 1)*model.M >= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z / model.Z_ref
 
-    model.Voltage_balance_rule4 = Constraint(model.links_clusters, rule=Voltage_balance_rule4)
+        model.Voltage_balance_rule4 = Constraint(model.links_clusters, rule=Voltage_balance_rule4)
 
-    def Voltage_balance_rule44(model, i, j):
-        return (model.E[i] - model.E[j]) + model.y[i, j] >= model.dist[i, j] / 1000 * model.P[
-            i, j] * model.Z2 / model.Z_ref
+        def Voltage_balance_rule44(model, i, j):
+            return (model.E[i] - model.E[j]) + model.y[i, j]*model.M >= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z2 / model.Z_ref
 
-    model.Voltage_balance_rule44 = Constraint(model.links_clusters, rule=Voltage_balance_rule44)
+        model.Voltage_balance_rule44 = Constraint(model.links_clusters, rule=Voltage_balance_rule44)
 
-    def Voltage_limit(model, i):
-        return model.E[i] >= model.k[i] * (model.PS_voltage[i] - model.E_min) + model.E_min
+        def Voltage_limit(model, i):
+            return model.E[i] >= model.k[i] * (model.PS_voltage[i] - model.E_min) + model.E_min
 
-    model.Voltage_limit = Constraint(model.N_PS, rule=Voltage_limit)
+        model.Voltage_limit = Constraint(model.N_PS, rule=Voltage_limit)
 
-    def Voltage_PS2(model, i):
-        return model.E[i] <= model.PS_voltage[i]
+        def Voltage_PS2(model, i):
+            return model.E[i] <= model.PS_voltage[i]
 
-    model.Voltage_PS2 = Constraint(model.N_PS, rule=Voltage_PS2)
+        model.Voltage_PS2 = Constraint(model.N_PS, rule=Voltage_PS2)
 
+        def Voltage_limit_clusters2(model, i):
+            return model.E[i] >= model.E_min
 
-
-    def Voltage_limit_clusters2(model, i):
-        return model.E[i] >= model.E_min
-
-    model.Voltage_limit_clusters2 = Constraint(model.N_clusters, rule=Voltage_limit_clusters2)
+        model.Voltage_limit_clusters2 = Constraint(model.N_clusters, rule=Voltage_limit_clusters2)
 
     def PS_power_rule_upper(model, i):
         return model.PPS[i] <= model.PSmax[i] * model.k[i]
@@ -3416,7 +2811,7 @@ def MILP_2cables(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reac
     model.PS_power_upper = Constraint(model.N_PS, rule=PS_power_rule_upper)
 
     def Balance_rule(model):
-        return (sum(model.PPS[i] for i in model.N_PS)  - sum(
+        return (sum(model.PPS[i] for i in model.N_PS) - sum(
             model.Psub[i] for i in model.N_clusters)) == 0
 
     model.Balance = Constraint(rule=Balance_rule)
@@ -3432,21 +2827,25 @@ def MILP_2cables(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reac
     def ObjectiveFunction(model):
         # return summation(model.weights, model.x) * model.cf / 1000 + summation(model.weights, model.x1) * model.cf2 / 10000
         return summation(model.weights, model.x) * model.cf / 10000   \
-               + summation(model.ps_cost, model.k) + summation(model.weights, model.x1) * model.cf2 / 10000 + sum(
-            model.y[i] for i in model.links_clusters) * model.delta_cf
+              + summation(model.ps_cost, model.k) + summation(model.weights, model.x1) * model.cf2 / 10000 + \
+             summation(model.weights_clusters,model.y)/10000 * model.delta_cf
 
     model.Obj = Objective(rule=ObjectiveFunction, sense=minimize)
 
     #############Solve model##################
 
     instance = model.create_instance(data)
+    instance.write("mymodel.lp")
     print('Instance is constructed:', instance.is_constructed())
     # opt = SolverFactory('cbc',executable=r'C:\Users\Asus\Desktop\POLIMI\Thesis\GISELE\Gisele_MILP\cbc')
     opt = SolverFactory('gurobi')
     # opt.options['numericfocus']=0
-    opt.options['mipgap'] = 0.01
-    #opt.options['presolve'] = 2
-    # opt.options['mipfocus']=2
+    opt.options['mipgap'] = 0.02
+    opt.options['TimeLimit'] = 10800*2.5
+    opt.options['presolve'] = 2
+    opt.options['threads'] = 4
+    #opt.options['mipfocus']=1
+    #opt.options['NumericFocus']=2
     # opt = SolverFactory('cbc',executable=r'C:\Users\Asus\Desktop\POLIMI\Thesis\GISELE\New folder\cbc')
     print('Starting optimization process')
     time_i = datetime.now()
@@ -3457,7 +2856,10 @@ def MILP_2cables(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reac
     links_small = instance.x1
     power = instance.P
     subs = instance.k
-    voltage = instance.E
+    if voltage_constraint:
+        voltage = instance.E
+    else:
+        voltage = instance.N
     PS = instance.PPS
 
     links_clusters_type = instance.y
@@ -3493,7 +2895,10 @@ def MILP_2cables(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reac
     k = 0
     for v in voltage:
         Voltages.loc[k, 'index'] = v
-        Voltages.loc[k, 'voltage [p.u]'] = value(voltage[v])
+        if voltage_constraint:
+            Voltages.loc[k, 'voltage [p.u]'] = value(voltage[v])
+        else:
+            Voltages.loc[k, 'voltage [p.u]'] = 1
         k = k + 1
     k = 0
     for index in power:
@@ -3519,3 +2924,1203 @@ def MILP_2cables(gisele_folder,case_study,n_clusters,coe,voltage,resistance,reac
     PrSubstation.to_csv(MILP_output_folder + '/PrimarySubstations.csv', index=False)
     Voltages.to_csv(MILP_output_folder + '/Voltages.csv', index=False)
     all_lines.to_csv(MILP_output_folder + '/all_lines.csv', index=False)
+    instance.GetTuneResult()
+def MILP_3cables(gisele_folder,case_study,n_clusters,coe,voltage,line1,line2,line3):
+
+    voltage_constraint = True
+    ############ Create abstract model ###########
+    model = AbstractModel()
+    data = DataPortal()
+    MILP_input_folder = gisele_folder + '/Case studies/' + case_study + '/Intermediate/Optimization/MILP_input'
+    MILP_output_folder = gisele_folder + '/Case studies/' + case_study + '/Intermediate/Optimization/MILP_output'
+    os.chdir(MILP_input_folder)
+    # ####################Define sets#####################
+
+    # Define some basic parameter for the per unit conversion and voltage limitation
+    Abase = 1
+    Vmin = 0.9
+
+    # Name of all the nodes (primary and secondary substations)
+    model.N = Set()
+    data.load(filename='nodes.csv', set=model.N)  # first row is not read
+    model.N_clusters = Set()
+    data.load(filename='nodes_clusters.csv', set=model.N_clusters)
+
+    model.N_PS = Set()
+    data.load(filename='nodes_PS.csv', set=model.N_PS)
+    # Node corresponding to primary substation
+
+    # Allowed connections
+    model.links = Set(dimen=2)  # in the csv the values must be delimited by commas
+    data.load(filename='links_all.csv', set=model.links)
+
+    model.links_clusters = Set(dimen=2)
+    data.load(filename='links_clusters.csv', set=model.links_clusters)
+
+    model.links_decision = Set(dimen=2)
+    data.load(filename='links_decision.csv', set=model.links_decision)
+
+    # Nodes are divided into two sets, as suggested in https://pyomo.readthedocs.io/en/stable/pyomo_modeling_components/Sets.html:
+    # NodesOut[nodes] gives for each node all nodes that are connected to it via outgoing links
+    # NodesIn[nodes] gives for each node all nodes that are connected to it via ingoing links
+
+    def NodesOut_init(model, node):
+        retval = []
+        for (i, j) in model.links:
+            if i == node:
+                retval.append(j)
+        return retval
+
+    model.NodesOut = Set(model.N, initialize=NodesOut_init)
+
+    def NodesIn_init(model, node):
+        retval = []
+        for (i, j) in model.links:
+            if j == node:
+                retval.append(i)
+        return retval
+
+    model.NodesIn = Set(model.N, initialize=NodesIn_init)
+
+    #####################Define parameters#####################
+
+    # Electric power in the nodes (injected (-) or absorbed (+))
+    model.Psub = Param(model.N_clusters)
+    data.load(filename='power_nodes.csv', param=model.Psub)
+
+    # model.PS=Param(model.N)
+    # data.load(filename='PS.csv',param=model.PS)
+
+
+
+    model.ps_cost = Param(model.N_PS)
+    data.load(filename='PS_costs.csv', param=model.ps_cost)
+
+    model.PSmax = Param(model.N_PS)
+    data.load(filename='PS_power_max.csv', param=model.PSmax)
+
+
+
+    # Power of the primary substation as sum of all the other powers
+    # def PPS_init(model):
+    #    return sum(model.Psub[i] for i in model.N)
+    # model.PPS=Param(model.PS,initialize=PPS_init)
+
+    # Connection length of all the edges
+    model.dist = Param(model.links)
+    data.load(filename='distances.csv', param=model.dist)
+
+    model.weights = Param(model.links_decision)
+    data.load(filename='weights_decision_lines.csv', param=model.weights)
+    # Electrical parameters of all the cables
+
+
+
+    model.P_max1 = Param(initialize=line1['Pmax'])
+    model.P_max2 = Param(initialize = line2['Pmax'])
+    model.P_max3 = Param(initialize=line3['Pmax'])
+    model.cf1 = Param(initialize=line1['line_cost'])
+    model.cf2 = Param(initialize =line2['line_cost'])
+    model.cf3 = Param(initialize=line3['line_cost'])
+
+    model.delta_cf1 = model.cf1-model.cf3
+    model.delta_cf2 = model.cf2 - model.cf3
+
+    model.n_clusters = Param(initialize=n_clusters)
+
+
+
+    #####################Define variables#####################
+
+    # binary variable x[i,j]: 1 if the connection i,j is present, 0 otherwise
+    model.x = Var(model.links_decision, within=Binary)
+    model.x1 = Var(model.links_decision, within=Binary)
+    model.x2 = Var(model.links_decision, within=Binary)
+    model.y = Var(model.links_clusters, within=Binary) #type 1
+    model.y1 = Var(model.links_clusters, within=Binary)# type 2
+    # x is if decision link is of cable type 1, x1 if it is of cable type 2. On the other hand, y is simply 1 decision variable
+    # since we know that it is chosen, we just want to know if it's the better cable or not. So, we consider that the base cable is the smaller one,
+    # and we just add the additional power availability, voltage drop and cost.
+    # power[i,j] is the power flow of connection i-j
+    model.P = Var(model.links)
+    # positive variables E(i) is p.u. voltage at each node
+    if voltage_constraint:
+        model.V_ref = Param(initialize=voltage)
+        model.A_ref = Param(initialize=Abase)
+        model.E = Var(model.N, within=NonNegativeReals)
+        model.R_ref = Param(initialize=line1['resistance'])
+        model.R_ref2 = Param(initialize=line2['resistance'])
+        model.R_ref3 = Param(initialize=line3['resistance'])
+        model.X_ref = Param(initialize=line1['reactance'])
+        model.X_ref2 = Param(initialize=line2['reactance'])
+        model.X_ref3 = Param(initialize=line3['reactance'])
+        model.Z_ref = Param(initialize=model.V_ref ** 2 / Abase)
+        model.Z1 = Param(initialize=(model.R_ref + model.X_ref * 0.5)/model.Z_ref)
+        model.Z2 = Param(initialize=(model.R_ref2 + model.X_ref2 * 0.5)/model.Z_ref)
+        model.Z3 = Param(initialize=(model.R_ref3 + model.X_ref3 * 0.5)/model.Z_ref)
+
+
+        model.E_min = Param(initialize=Vmin)
+        model.PS_voltage = Param(model.N_PS)
+        data.load(filename='PS_voltage.csv', param=model.PS_voltage)
+
+    # binary variable k[i]: 1 if node i is a primary substation, 0 otherwise
+    model.k = Var(model.N_PS, within=Binary)
+    # Power output of Primary substation
+    model.PPS = Var(model.N_PS, within=NonNegativeReals)
+
+
+
+    model.M = 100
+    #####################Define constraints###############################
+    # def Make_problem_easy(model,i,j):
+    #    return model.x[i,j]+model.weights[i,j]>=1
+    # model.easy = Constraint(model.links, rule=Make_problem_easy)
+
+
+    def Radiality_rule(model):
+        # return summation(model.x)==len(model.N)-summation(model.k)
+        return summation(model.x) + summation(model.x1) + summation(model.x2) == model.n_clusters
+
+    model.Radiality = Constraint(rule=Radiality_rule)
+
+
+    def Power_flow_conservation_rule(model, node):
+        return (sum(model.P[j, node] for j in model.NodesIn[node]) - sum(
+            model.P[node, j] for j in model.NodesOut[node])) == model.Psub[node]
+
+    model.Power_flow_conservation = Constraint(model.N_clusters, rule=Power_flow_conservation_rule)
+
+
+    def Power_flow_conservation_rule3(model, node):
+        return (sum(model.P[j, node] for j in model.NodesIn[node]) - sum(
+            model.P[node, j] for j in model.NodesOut[node])) == - model.PPS[node]
+
+    model.Power_flow_conservation3 = Constraint(model.N_PS, rule=Power_flow_conservation_rule3)
+
+    def Power_upper_decision(model, i, j):
+        return model.P[i, j] <= model.x[i,j]*model.P_max1 + model.x1[i,j]*model.P_max2 + model.x2[i,j]*model.P_max3
+
+    model.Power_upper_decision = Constraint(model.links_decision, rule=Power_upper_decision)
+
+
+    def Power_lower_decision(model, i, j):
+        return model.P[i, j] >= -(model.x[i,j]*model.P_max1 + model.x1[i,j]*model.P_max2 + model.x2[i,j]*model.P_max3)
+
+    model.Power_lower_decision = Constraint(model.links_decision, rule=Power_lower_decision)
+
+    def Power_upper_clusters(model, i, j):
+        return model.P[i, j] <= model.P_max3 + model.y[i, j] * (model.P_max1-model.P_max3) + model.y1[i,j]*(model.P_max2-model.P_max3)
+
+    model.Power_upper_clusters = Constraint(model.links_clusters, rule=Power_upper_clusters)
+
+    def Power_lower_clusters(model, i, j):
+        return model.P[i, j] >= -(model.P_max3 + model.y[i, j] * (model.P_max1-model.P_max3) + model.y1[i,j]*(model.P_max2-model.P_max3))
+
+    model.Power_lower_clusters = Constraint(model.links_clusters, rule=Power_lower_clusters)
+
+    if voltage_constraint:
+        # Voltage constraints
+        def Voltage_balance_rule1(model, i, j):
+            return (model.E[i] - model.E[j]) + (model.x[i, j] - 1)*model.M <= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z1
+
+        model.Voltage_balance_rule1 = Constraint(model.links_decision, rule=Voltage_balance_rule1)
+
+        def Voltage_balance_rule11(model, i, j):
+            return (model.E[i] - model.E[j]) + (model.x1[i, j] - 1)*model.M <= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z2
+
+        model.Voltage_balance_rule11 = Constraint(model.links_decision, rule=Voltage_balance_rule11)
+
+        def Voltage_balance_rule12(model, i, j):
+            return (model.E[i] - model.E[j]) + (model.x2[i, j] - 1)*model.M <= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z3
+
+        model.Voltage_balance_rule12 = Constraint(model.links_decision, rule=Voltage_balance_rule12)
+
+        def Voltage_balance_rule2(model, i, j):
+            return (model.E[i] - model.E[j]) + (- model.x[i, j] + 1)*model.M >= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z1
+
+        model.Voltage_balance_rule2 = Constraint(model.links_decision, rule=Voltage_balance_rule2)
+
+        def Voltage_balance_rule21(model, i, j):
+            return (model.E[i] - model.E[j]) + (- model.x1[i, j] + 1)*model.M >= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z2
+
+        model.Voltage_balance_rule21 = Constraint(model.links_decision, rule=Voltage_balance_rule21)
+
+        def Voltage_balance_rule22(model, i, j):
+            return (model.E[i] - model.E[j]) + (- model.x2[i, j] + 1)*model.M >= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z3
+
+        model.Voltage_balance_rule22 = Constraint(model.links_decision, rule=Voltage_balance_rule22)
+
+        def Voltage_balance_rule3(model, i, j):
+            return (model.E[i] - model.E[j]) + (model.y[i, j] - 1)*model.M <= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z1
+
+        model.Voltage_balance_rule3 = Constraint(model.links_clusters, rule=Voltage_balance_rule3)
+
+        def Voltage_balance_rule31(model, i, j):
+            return (model.E[i] - model.E[j]) + (model.y1[i, j] - 1)*model.M <= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z2
+
+        model.Voltage_balance_rule31 = Constraint(model.links_clusters, rule=Voltage_balance_rule31)
+
+        def Voltage_balance_rule32(model, i, j):
+            return (model.E[i] - model.E[j]) -(model.y[i, j]+model.y1[i,j])*model.M <= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z3
+
+        model.Voltage_balance_rule32 = Constraint(model.links_clusters, rule=Voltage_balance_rule32)
+
+        def Voltage_balance_rule4(model, i, j):
+            return (model.E[i] - model.E[j]) + (- model.y[i, j] + 1)*model.M >= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z1
+
+        model.Voltage_balance_rule4 = Constraint(model.links_clusters, rule=Voltage_balance_rule4)
+
+        def Voltage_balance_rule41(model, i, j):
+            return (model.E[i] - model.E[j]) + (- model.y1[i, j] + 1)*model.M >= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z2
+
+        model.Voltage_balance_rule41 = Constraint(model.links_clusters, rule=Voltage_balance_rule41)
+
+        def Voltage_balance_rule44(model, i, j):
+            return (model.E[i] - model.E[j]) + (model.y[i, j]+model.y1[i,j])*model.M >= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z3
+
+        model.Voltage_balance_rule44 = Constraint(model.links_clusters, rule=Voltage_balance_rule44)
+
+        def Voltage_limit(model, i):
+            return model.E[i] >= model.k[i] * (model.PS_voltage[i] - model.E_min) + model.E_min
+
+        model.Voltage_limit = Constraint(model.N_PS, rule=Voltage_limit)
+
+        def Voltage_PS2(model, i):
+            return model.E[i] <= model.PS_voltage[i]
+
+        model.Voltage_PS2 = Constraint(model.N_PS, rule=Voltage_PS2)
+
+        def Voltage_limit_clusters2(model, i):
+            return model.E[i] >= model.E_min
+
+        model.Voltage_limit_clusters2 = Constraint(model.N_clusters, rule=Voltage_limit_clusters2)
+
+    def PS_power_rule_upper(model, i):
+        return model.PPS[i] <= model.PSmax[i] * model.k[i]
+
+    model.PS_power_upper = Constraint(model.N_PS, rule=PS_power_rule_upper)
+
+    def Balance_rule(model):
+        return (sum(model.PPS[i] for i in model.N_PS) - sum(
+            model.Psub[i] for i in model.N_clusters)) == 0
+
+    model.Balance = Constraint(rule=Balance_rule)
+
+    def anti_paralel(model, i, j):
+        return model.x[i, j] + model.x1[i, j] + model.x2[i,j] <= 1
+
+    model.anti_paralel = Constraint(model.links_decision, rule=anti_paralel)
+
+    def anti_paralel2(model, i, j):
+        return model.y[i, j] + model.y1[i, j] <= 1
+
+    model.anti_paralel2 = Constraint(model.links_clusters, rule=anti_paralel2)
+
+    ####################Define objective function##########################
+
+    def ObjectiveFunction(model):
+        # return summation(model.weights, model.x) * model.cf / 1000 + summation(model.weights, model.x1) * model.cf2 / 10000
+        return summation(model.weights, model.x) * model.cf1 / 10000   \
+               + summation(model.ps_cost, model.k) + summation(model.weights, model.x1) * model.cf2 / 10000 + summation(model.weights, model.x2) * model.cf3 / 10000\
+               + sum(model.y[i] for i in model.links_clusters) * model.delta_cf1 + sum(model.y1[i] for i in model.links_clusters) * model.delta_cf2
+
+    model.Obj = Objective(rule=ObjectiveFunction, sense=minimize)
+
+    #############Solve model##################
+
+    instance = model.create_instance(data)
+    print('Instance is constructed:', instance.is_constructed())
+    # opt = SolverFactory('cbc',executable=r'C:\Users\Asus\Desktop\POLIMI\Thesis\GISELE\Gisele_MILP\cbc')
+    opt = SolverFactory('gurobi')
+    # opt.options['numericfocus']=0
+    opt.options['mipgap'] = 0.01
+    opt.options['TimeLimit'] = 900
+    opt.options['presolve'] = 2
+    opt.options['mipfocus']=2
+    # opt = SolverFactory('cbc',executable=r'C:\Users\Asus\Desktop\POLIMI\Thesis\GISELE\New folder\cbc')
+    print('Starting optimization process')
+    time_i = datetime.now()
+    opt.solve(instance, tee=True, symbolic_solver_labels=True)
+    time_f = datetime.now()
+    print('Time required for optimization is', time_f - time_i)
+    links = instance.x
+    links_small = instance.x1
+    links_smallest = instance.x2
+    power = instance.P
+    subs = instance.k
+    if voltage_constraint:
+        voltage = instance.E
+    else:
+        voltage = instance.N
+    PS = instance.PPS
+
+    links_clusters_large = instance.y
+    links_clusters_small = instance.y1
+    links_clusters = instance.links_clusters
+    # voltage_drop=instance.z
+    connections_output = pd.DataFrame(columns=[['id1', 'id2', 'power', 'Type']])
+    PrSubstation = pd.DataFrame(columns=[['index', 'power']])
+    all_lines = pd.DataFrame(columns=[['id1', 'id2', 'power']])
+    Voltages = pd.DataFrame(columns=[['index', 'voltage [p.u]']])
+
+    Links_Clusters = pd.DataFrame(columns=[['id1', 'id2', 'power', 'Type']])
+    k = 0
+    for index in links:
+        if int(round(value(links[index]))) == 1:
+            connections_output.loc[k, 'id1'] = index[0]
+            connections_output.loc[k, 'id2'] = index[1]
+            connections_output.loc[k, 'power'] = value(power[index])
+            connections_output.loc[k, 'Type'] = 'Large'
+            k = k + 1
+        elif int(round(value(links_small[index]))) == 1:
+            connections_output.loc[k, 'id1'] = index[0]
+            connections_output.loc[k, 'id2'] = index[1]
+            connections_output.loc[k, 'power'] = value(power[index])
+            connections_output.loc[k, 'Type'] = 'Small'
+            k = k + 1
+        elif int(round(value(links_smallest[index]))) == 1:
+            connections_output.loc[k, 'id1'] = index[0]
+            connections_output.loc[k, 'id2'] = index[1]
+            connections_output.loc[k, 'power'] = value(power[index])
+            connections_output.loc[k, 'Type'] = 'Smallest'
+            k = k + 1
+    k = 0
+    for index in subs:
+        if int(round(value(subs[index]))) == 1:
+            PrSubstation.loc[k, 'index'] = index
+            PrSubstation.loc[k, 'power'] = value(PS[index])
+            print(((value(PS[index]))))
+            k = k + 1
+    k = 0
+    for v in voltage:
+        Voltages.loc[k, 'index'] = v
+        if voltage_constraint:
+            Voltages.loc[k, 'voltage [p.u]'] = value(voltage[v])
+        else:
+            Voltages.loc[k, 'voltage [p.u]'] = 1
+        k = k + 1
+    k = 0
+    for index in power:
+        all_lines.loc[k, 'id1'] = index[0]
+        all_lines.loc[k, 'id2'] = index[1]
+        all_lines.loc[k, 'power'] = value(power[index])
+        k = k + 1
+    k = 0
+
+    for index in links_clusters:
+        print(index)
+        Links_Clusters.loc[k, 'id1'] = index[0]
+        Links_Clusters.loc[k, 'id2'] = index[1]
+        Links_Clusters.loc[k, 'power'] = value(power[index])
+        if int(round(value(links_clusters_large[index]))) == 1:
+            Links_Clusters.loc[k, 'Type'] = 'Large'
+        elif int(round(value(links_clusters_small[index]))) == 1:
+            Links_Clusters.loc[k, 'Type'] = 'Small'
+        else:
+            Links_Clusters.loc[k, 'Type'] = 'Smallest'
+        k = k + 1
+
+    Links_Clusters.to_csv(MILP_output_folder + '/links_clusters.csv', index=False)
+    connections_output.to_csv(MILP_output_folder + '/connections_output.csv', index=False)
+    PrSubstation.to_csv(MILP_output_folder + '/PrimarySubstations.csv', index=False)
+    Voltages.to_csv(MILP_output_folder + '/Voltages.csv', index=False)
+    all_lines.to_csv(MILP_output_folder + '/all_lines.csv', index=False)
+
+def MILP_MG_2cables(gisele_folder,case_study,n_clusters,coe,voltage,line1,line2):
+
+
+    ############ Create abstract model ###########
+    model = AbstractModel()
+    data = DataPortal()
+    MILP_input_folder = gisele_folder + '/Case studies/' + case_study + '/Intermediate/Optimization/MILP_input'
+    MILP_output_folder = gisele_folder + '/Case studies/' + case_study + '/Intermediate/Optimization/MILP_output'
+    os.chdir(MILP_input_folder)
+    # ####################Define sets#####################
+    voltage_constraint = True
+    # Define some basic parameter for the per unit conversion and voltage limitation
+    Abase = 1
+    Vmin = 0.9
+
+    # Name of all the nodes (primary and secondary substations)
+    model.N = Set()
+    data.load(filename='nodes.csv', set=model.N)  # first row is not read
+    model.N_clusters = Set()
+    data.load(filename='nodes_clusters.csv', set=model.N_clusters)
+    model.N_MG = Set()
+    data.load(filename='microgrids_nodes.csv', set=model.N_MG)
+    model.N_PS = Set()
+    data.load(filename='nodes_PS.csv', set=model.N_PS)
+    # Node corresponding to primary substation
+
+    # Allowed connections
+    model.links = Set(dimen=2)  # in the csv the values must be delimited by commas
+    data.load(filename='links_all.csv', set=model.links)
+
+    model.links_clusters = Set(dimen=2)
+    data.load(filename='links_clusters.csv', set=model.links_clusters)
+
+    model.links_decision = Set(dimen=2)
+    data.load(filename='links_decision.csv', set=model.links_decision)
+
+    # Nodes are divided into two sets, as suggested in https://pyomo.readthedocs.io/en/stable/pyomo_modeling_components/Sets.html:
+    # NodesOut[nodes] gives for each node all nodes that are connected to it via outgoing links
+    # NodesIn[nodes] gives for each node all nodes that are connected to it via ingoing links
+
+    def NodesOut_init(model, node):
+        retval = []
+        for (i, j) in model.links:
+            if i == node:
+                retval.append(j)
+        return retval
+
+    model.NodesOut = Set(model.N, initialize=NodesOut_init)
+
+    def NodesIn_init(model, node):
+        retval = []
+        for (i, j) in model.links:
+            if j == node:
+                retval.append(i)
+        return retval
+
+    model.NodesIn = Set(model.N, initialize=NodesIn_init)
+
+    #####################Define parameters#####################
+
+    # Electric power in the nodes (injected (-) or absorbed (+))
+    model.Psub = Param(model.N_clusters)
+    data.load(filename='power_nodes.csv', param=model.Psub)
+
+    # model.PS=Param(model.N)
+    # data.load(filename='PS.csv',param=model.PS)
+
+    model.microgrid_power = Param(model.N_MG)
+    data.load(filename='microgrids_powers.csv', param=model.microgrid_power)
+
+    model.energy = Param(model.N_MG)
+    data.load(filename='energy.csv', param=model.energy)
+
+    model.mg_cost = Param(model.N_MG)
+    data.load(filename='microgrids_costs.csv', param=model.mg_cost)
+
+    model.ps_cost = Param(model.N_PS)
+    data.load(filename='PS_costs.csv', param=model.ps_cost)
+
+    model.PSmax = Param(model.N_PS)
+    data.load(filename='PS_power_max.csv', param=model.PSmax)
+
+
+
+    # Power of the primary substation as sum of all the other powers
+    # def PPS_init(model):
+    #    return sum(model.Psub[i] for i in model.N)
+    # model.PPS=Param(model.PS,initialize=PPS_init)
+
+    # Connection distance of all the edges
+    model.dist = Param(model.links)
+    data.load(filename='distances.csv', param=model.dist)
+
+    model.weights = Param(model.links_decision)
+    data.load(filename='weights_decision_lines.csv', param=model.weights)
+
+    model.weights_clusters = Param(model.links_clusters)
+    data.load(filename='weights_clusters.csv', param=model.weights_clusters)
+    # Cost parameters of all the cables
+    model.cf = Param(initialize=line1['line_cost'])
+    model.cf2 = Param(initialize=line2['line_cost'])
+
+    model.n_clusters = Param(initialize=n_clusters)
+    model.coe = Param(initialize=coe)
+
+
+    #####################Define variables#####################
+
+    # binary variable x[i,j]: 1 if the connection i,j is present, 0 otherwise
+    model.x = Var(model.links_decision, within=Binary)
+    model.x1 = Var(model.links_decision, within=Binary)
+    model.y = Var(model.links_clusters, within=Binary)
+    # x is if decision link is of cable type 1, x1 if it is of cable type 2. On the other hand, y is simply 1 decision variable
+    # since we know that it is chosen, we just want to know if it's the better cable or not. So, we consider that the base cable is the smaller one,
+    # and we just add the additional power availability, voltage drop and cost.
+    # power[i,j] is the power flow of connection i-j
+    model.P = Var(model.links)
+
+    # microgrid
+    model.z = Var(model.N_MG, within=Binary)
+    # binary variable k[i]: 1 if node i is a primary substation, 0 otherwise
+    model.k = Var(model.N_PS, within=Binary)
+    # Power output of Primary substation
+    model.PPS = Var(model.N_PS, within=NonNegativeReals)
+    model.MG_output = Var(model.N_MG)
+
+
+    if voltage_constraint:
+        # positive variables E(i) is p.u. voltage at each node
+        model.E = Var(model.N, within=NonNegativeReals)
+        model.V_ref = Param(initialize=voltage)
+        model.A_ref = Param(initialize=Abase)
+        model.E_min = Param(initialize=Vmin)
+
+        model.R_ref = Param(initialize=line1['resistance'])
+        model.R_ref2 = Param(initialize=line2['resistance'])
+        model.X_ref = Param(initialize=line1['reactance'])
+        model.X_ref2 = Param(initialize=line2['reactance'])
+
+
+
+        model.Z = Param(initialize=model.R_ref + model.X_ref * 0.5)
+        model.Z2 = Param(initialize=model.R_ref2 + model.X_ref2 * 0.5)
+        model.Z_ref = Param(initialize=model.V_ref ** 2 / Abase)
+        model.PS_voltage = Param(model.N_PS)
+        model.delta_Z = model.Z - model.Z2
+        data.load(filename='PS_voltage.csv', param=model.PS_voltage)
+    model.P_max = Param(initialize=line1['Pmax'])
+    model.P_max2 = Param(initialize=line2['Pmax'])
+    model.delta_Pmax = model.P_max - model.P_max2
+
+    model.delta_cf = model.cf - model.cf2
+    #####################Define constraints###############################
+    # def Make_problem_easy(model,i,j):
+    #    return model.x[i,j]+model.weights[i,j]>=1
+    # model.easy = Constraint(model.links, rule=Make_problem_easy)
+
+    def Radiality_rule(model):
+        # return summation(model.x)==len(model.N)-summation(model.k)
+        return summation(model.x) + summation(model.x1) == model.n_clusters
+
+    model.Radiality = Constraint(rule=Radiality_rule)
+
+    def Radiality_rule2(model):
+        return summation(model.k) + summation(model.z) <= model.n_clusters
+
+    model.Radiality2 = Constraint(rule = Radiality_rule2)
+    def Power_flow_conservation_rule(model, node):
+        return (sum(model.P[j, node] for j in model.NodesIn[node]) - sum(
+            model.P[node, j] for j in model.NodesOut[node])) == model.Psub[node]
+
+    model.Power_flow_conservation = Constraint(model.N_clusters, rule=Power_flow_conservation_rule)
+
+    def Power_flow_conservation_rule2(model, node):
+        return (sum(model.P[j, node] for j in model.NodesIn[node]) - sum(
+            model.P[node, j] for j in model.NodesOut[node])) == - model.MG_output[node]
+
+    model.Power_flow_conservation2 = Constraint(model.N_MG, rule=Power_flow_conservation_rule2)
+
+    def Power_flow_conservation_rule3(model, node):
+        return (sum(model.P[j, node] for j in model.NodesIn[node]) - sum(
+            model.P[node, j] for j in model.NodesOut[node])) == - model.PPS[node]
+
+    model.Power_flow_conservation3 = Constraint(model.N_PS, rule=Power_flow_conservation_rule3)
+
+    def Power_upper_decision(model, i, j):
+        return model.P[i, j] <= model.P_max * model.x[i, j] + model.P_max2 * model.x1[i, j]
+
+    model.Power_upper_decision = Constraint(model.links_decision, rule=Power_upper_decision)
+
+    def Power_lower_decision(model, i, j):
+        return model.P[i, j] >= -model.P_max * model.x[i, j] - model.P_max2 * model.x1[i, j]
+
+    model.Power_lower_decision = Constraint(model.links_decision, rule=Power_lower_decision)
+
+    def Power_upper_clusters(model, i, j):
+        return model.P[i, j] <= model.P_max2 + model.y[i, j] * model.delta_Pmax
+
+    model.Power_upper_clusters = Constraint(model.links_clusters, rule=Power_upper_clusters)
+
+    def Power_lower_clusters(model, i, j):
+        return model.P[i, j] >= -model.P_max2 - model.y[i, j] * model.delta_Pmax
+
+    model.Power_lower_clusters = Constraint(model.links_clusters, rule=Power_lower_clusters)
+    if voltage_constraint:
+        # Voltage constraints
+        def Voltage_balance_rule(model, i, j):
+            return (model.E[i] - model.E[j]) + model.x[i, j] - 1 <= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z / model.Z_ref
+
+        model.Voltage_balance_rule = Constraint(model.links_decision, rule=Voltage_balance_rule)
+
+        def Voltage_balance_rule11(model, i, j):
+            return (model.E[i] - model.E[j]) + model.x1[i, j] - 1 <= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z2 / model.Z_ref
+
+        model.Voltage_balance_rule11 = Constraint(model.links_decision, rule=Voltage_balance_rule11)
+
+        def Voltage_balance_rule2(model, i, j):
+            return (model.E[i] - model.E[j]) - model.x[i, j] + 1 >= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z / model.Z_ref
+
+        model.Voltage_balance_rule2 = Constraint(model.links_decision, rule=Voltage_balance_rule2)
+
+        def Voltage_balance_rule22(model, i, j):
+            return (model.E[i] - model.E[j]) - model.x1[i, j] + 1 >= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z2 / model.Z_ref
+
+        model.Voltage_balance_rule22 = Constraint(model.links_decision, rule=Voltage_balance_rule22)
+
+        def Voltage_balance_rule3(model, i, j):
+            return (model.E[i] - model.E[j]) + model.y[i, j] - 1 <= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z / model.Z_ref
+
+        model.Voltage_balance_rule3 = Constraint(model.links_clusters, rule=Voltage_balance_rule3)
+
+        def Voltage_balance_rule33(model, i, j):
+            return (model.E[i] - model.E[j]) - model.y[i, j] <= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z2 / model.Z_ref
+
+        model.Voltage_balance_rule33 = Constraint(model.links_clusters, rule=Voltage_balance_rule33)
+
+        def Voltage_balance_rule4(model, i, j):
+            return (model.E[i] - model.E[j]) - model.y[i, j] + 1 >= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z / model.Z_ref
+
+        model.Voltage_balance_rule4 = Constraint(model.links_clusters, rule=Voltage_balance_rule4)
+
+        def Voltage_balance_rule44(model, i, j):
+            return (model.E[i] - model.E[j]) + model.y[i, j] >= model.dist[i, j] / 1000 * model.P[
+                i, j] * model.Z2 / model.Z_ref
+
+        model.Voltage_balance_rule44 = Constraint(model.links_clusters, rule=Voltage_balance_rule44)
+
+        def Voltage_limit(model, i):
+            return model.E[i] >= model.k[i] * (model.PS_voltage[i] - model.E_min) + model.E_min
+
+        model.Voltage_limit = Constraint(model.N_PS, rule=Voltage_limit)
+
+        def Voltage_PS2(model, i):
+            return model.E[i] <= model.PS_voltage[i]
+
+        model.Voltage_PS2 = Constraint(model.N_PS, rule=Voltage_PS2)
+
+        def Voltage_limit_MG(model, i):
+            return model.E[i] <= 1
+
+        model.Voltage_limit_MG = Constraint(model.N_MG, rule=Voltage_limit_MG)
+
+        def Voltage_limit_MG2(model, i):
+            return model.E[i] >= model.z[i] * (1 - model.E_min) + model.E_min
+
+        model.Voltage_limit_MG2 = Constraint(model.N_MG, rule=Voltage_limit_MG2)
+
+
+        def Voltage_limit_clusters2(model, i):
+            return model.E[i] >= model.E_min
+
+        model.Voltage_limit_clusters2 = Constraint(model.N_clusters, rule=Voltage_limit_clusters2)
+
+    def PS_power_rule_upper(model, i):
+        return model.PPS[i] <= model.PSmax[i] * model.k[i]
+
+    model.PS_power_upper = Constraint(model.N_PS, rule=PS_power_rule_upper)
+
+    def Balance_rule(model):
+        return (sum(model.PPS[i] for i in model.N_PS) + sum(model.MG_output[i] for i in model.N_MG) - sum(
+            model.Psub[i] for i in model.N_clusters)) == 0
+
+    model.Balance = Constraint(rule=Balance_rule)
+
+    def anti_paralel(model, i, j):
+        return model.x[i, j] + model.x1[i, j] <= 1
+
+    model.anti_paralel = Constraint(model.links_decision, rule=anti_paralel)
+
+    def MG_power_limit(model, i):
+        return model.MG_output[i] == model.z[i] * model.microgrid_power[i]
+
+    model.MG_power_limit = Constraint(model.N_MG, rule=MG_power_limit)
+
+
+    ####################Define objective function##########################
+
+    def ObjectiveFunction(model):
+        # return summation(model.weights, model.x) * model.cf / 1000 + summation(model.weights, model.x1) * model.cf2 / 10000
+        return summation(model.weights, model.x) * model.cf / 10000 + summation(model.mg_cost, model.z) * 1000*0.6 + sum(
+            model.energy[i] * (1 - model.z[i]) for i in model.N_MG) * model.coe \
+               + summation(model.ps_cost, model.k) + summation(model.weights, model.x1) * model.cf2 / 10000 \
+               + summation(model.weights_clusters,model.y)/10000 * model.delta_cf
+        #return  summation(model.weights, model.x) * model.cf / 10000
+    model.Obj = Objective(rule=ObjectiveFunction, sense=minimize)
+
+    #############Solve model##################
+
+    instance = model.create_instance(data)
+    print('Instance is constructed:', instance.is_constructed())
+    # opt = SolverFactory('cbc',executable=r'C:\Users\Asus\Desktop\POLIMI\Thesis\GISELE\Gisele_MILP\cbc')
+    opt = SolverFactory('gurobi')
+    # opt.options['numericfocus']=0
+    opt.options['mipgap'] = 0.0175
+    opt.options['presolve'] = 2
+    opt.options['TimeLimit'] = 10000
+    opt.options['threads']=4
+    # opt.options['mipfocus']=2
+    # opt = SolverFactory('cbc',executable=r'C:\Users\Asus\Desktop\POLIMI\Thesis\GISELE\New folder\cbc')
+    print('Starting optimization process')
+    time_i = datetime.now()
+    opt.solve(instance, tee=True, symbolic_solver_labels=True)
+    time_f = datetime.now()
+    print('Time required for optimization is', time_f - time_i)
+
+    links = instance.x
+    links_small = instance.x1
+    power = instance.P
+    subs = instance.k
+    if voltage_constraint: #simple fix when voltage constraint is not active
+        voltage = instance.E
+    else:
+        voltage = instance.N
+    PS = instance.PPS
+    mg_output = instance.MG_output
+    microGrid = instance.z
+    links_clusters_type = instance.y
+    links_clusters = instance.links_clusters
+    # voltage_drop=instance.z
+    connections_output = pd.DataFrame(columns=[['id1', 'id2', 'power', 'Type']])
+    PrSubstation = pd.DataFrame(columns=[['index', 'power']])
+    all_lines = pd.DataFrame(columns=[['id1', 'id2', 'power']])
+    Voltages = pd.DataFrame(columns=[['index', 'voltage [p.u]']])
+    Microgrid = pd.DataFrame(columns=[['index', 'microgrid', 'power']])
+    Links_Clusters = pd.DataFrame(columns=[['id1', 'id2', 'power', 'Type']])
+    k = 0
+    for index in links:
+        if int(round(value(links[index]))) == 1:
+            connections_output.loc[k, 'id1'] = index[0]
+            connections_output.loc[k, 'id2'] = index[1]
+            connections_output.loc[k, 'power'] = value(power[index])
+            connections_output.loc[k, 'Type'] = 'Large'
+            k = k + 1
+        elif int(round(value(links_small[index]))) == 1:
+            connections_output.loc[k, 'id1'] = index[0]
+            connections_output.loc[k, 'id2'] = index[1]
+            connections_output.loc[k, 'power'] = value(power[index])
+            connections_output.loc[k, 'Type'] = 'Small'
+            k = k + 1
+    k = 0
+    for index in subs:
+        if int(round(value(subs[index]))) == 1:
+            PrSubstation.loc[k, 'index'] = index
+            PrSubstation.loc[k, 'power'] = value(PS[index])
+            # print(((value(PS[index]))))
+            k = k + 1
+    k = 0
+    for v in voltage:
+        Voltages.loc[k, 'index'] = v
+        if voltage_constraint:
+            Voltages.loc[k, 'voltage [p.u]'] = value(voltage[v])
+        else:
+            Voltages.loc[k, 'voltage [p.u]'] = 1
+        k = k + 1
+    k = 0
+    for index in power:
+        all_lines.loc[k, 'id1'] = index[0]
+        all_lines.loc[k, 'id2'] = index[1]
+        all_lines.loc[k, 'power'] = value(power[index])
+        k = k + 1
+    k = 0
+    for index in mg_output:
+        Microgrid.loc[k, 'index'] = index
+        Microgrid.loc[k, 'microgrid'] = value(microGrid[index])
+        Microgrid.loc[k, 'power'] = value(mg_output[index])
+        k = k + 1
+    k = 0
+    for index in links_clusters:
+        # print(index)
+        Links_Clusters.loc[k, 'id1'] = index[0]
+        Links_Clusters.loc[k, 'id2'] = index[1]
+        Links_Clusters.loc[k, 'power'] = value(power[index])
+        if int(round(value(links_clusters_type[index]))) == 1:
+            Links_Clusters.loc[k, 'Type'] = 'Large'
+        else:
+            Links_Clusters.loc[k, 'Type'] = 'Small'
+        k = k + 1
+
+    Links_Clusters.to_csv(MILP_output_folder + '/links_clusters.csv', index=False)
+    connections_output.to_csv(MILP_output_folder + '/connections_output.csv', index=False)
+    PrSubstation.to_csv(MILP_output_folder + '/PrimarySubstations.csv', index=False)
+    Voltages.to_csv(MILP_output_folder + '/Voltages.csv', index=False)
+    all_lines.to_csv(MILP_output_folder + '/all_lines.csv', index=False)
+    Microgrid.to_csv(MILP_output_folder + '/Microgrid.csv', index=False)
+    print('There are ' + str(int(Microgrid.iloc[:,1].sum()))+' microgrids selected. ')
+    # k=0
+    # for index in links:
+    #     if int(round(value(links[index])))==1:
+    #         Voltage_drop.loc[k,'id1']=index[0]
+    #         Voltage_drop.loc[k,'id2']=index[1]
+    #         Voltage_drop.loc[k,'v_drop']=value(voltage_drop[index])
+    #         k=k+1
+    # Voltage_drop.to_csv('MILP_results/solution_new/Voltage_drops.csv',index=False)
+
+def MILP_MG_noRel_new(gisele_folder,case_study,n_clusters,coe,voltage,line1,mg_option):
+    model = AbstractModel()
+    data = DataPortal()
+    MILP_input_folder = gisele_folder + '/Case studies/' + case_study + '/Intermediate/Optimization/MILP_input'
+    MILP_output_folder = gisele_folder + '/Case studies/' + case_study + '/Intermediate/Optimization/MILP_output'
+    os.chdir(MILP_input_folder)
+    # ####################Define sets#####################
+
+    # Define some basic parameter for the per unit conversion and voltage limitation
+    Abase = 1
+    Vmin = 0.9
+
+    # Name of all the nodes (primary and secondary substations)
+    model.N = Set()
+    data.load(filename='nodes.csv', set=model.N)  # first row is not read
+    model.N_clusters = Set()
+    data.load(filename='nodes_clusters.csv', set=model.N_clusters)
+
+    model.N_PS = Set()
+    data.load(filename='nodes_PS.csv', set=model.N_PS)
+    # Node corresponding to primary substation
+
+    # Allowed connections
+    model.links = Set(dimen=2)  # in the csv the values must be delimited by commas
+    data.load(filename='links_all.csv', set=model.links)
+
+    model.links_clusters = Set(dimen=2)
+    data.load(filename='links_clusters.csv', set=model.links_clusters)
+
+    model.links_decision = Set(dimen=2)
+    data.load(filename='links_decision.csv', set=model.links_decision)
+
+    # Nodes are divided into two sets, as suggested in https://pyomo.readthedocs.io/en/stable/pyomo_modeling_components/Sets.html:
+    # NodesOut[nodes] gives for each node all nodes that are connected to it via outgoing links
+    # NodesIn[nodes] gives for each node all nodes that are connected to it via ingoing links
+
+    def NodesOut_init(model, node):
+        retval = []
+        for (i, j) in model.links:
+            if i == node:
+                retval.append(j)
+        return retval
+
+    model.NodesOut = Set(model.N, initialize=NodesOut_init)
+
+    def NodesIn_init(model, node):
+        retval = []
+        for (i, j) in model.links:
+            if j == node:
+                retval.append(i)
+        return retval
+
+    model.NodesIn = Set(model.N, initialize=NodesIn_init)
+
+    #####################Define parameters#####################
+
+    # Electric power in the nodes (injected (-) or absorbed (+))
+    model.Psub = Param(model.N_clusters)
+    data.load(filename='power_nodes.csv', param=model.Psub)
+
+    # model.PS=Param(model.N)
+    # data.load(filename='PS.csv',param=model.PS)
+
+
+
+
+
+
+    # TODO also calculate npv
+    model.ps_cost = Param(model.N_PS)
+    data.load(filename='PS_costs.csv', param=model.ps_cost)
+
+    model.PSmax = Param(model.N_PS)
+    data.load(filename='PS_power_max.csv', param=model.PSmax)
+
+    model.PS_voltage = Param(model.N_PS)
+    data.load(filename='PS_voltage.csv', param=model.PS_voltage)
+
+    # Power of the primary substation as sum of all the other powers
+    # def PPS_init(model):
+    #    return sum(model.Psub[i] for i in model.N)
+    # model.PPS=Param(model.PS,initialize=PPS_init)
+
+    # Connection distance of all the edges
+    model.dist = Param(model.links)
+    data.load(filename='distances.csv', param=model.dist)
+    #TODO use the npv cost of the lines
+    model.weights = Param(model.links_decision)
+    data.load(filename='weights_decision_lines.csv', param=model.weights)
+    #data.load(filename='weights_decision_lines_npv.csv', param=model.weights)
+
+    # Electrical parameters of all the cables
+    model.V_ref = Param(initialize=voltage)
+    model.A_ref = Param(initialize=Abase)
+    model.E_min = Param(initialize=Vmin)
+
+    model.R_ref = Param(initialize=line1['resistance'])
+    model.X_ref = Param(initialize=line1['reactance'])
+    model.P_max = Param(initialize=line1['Pmax'])
+    model.cf = Param(initialize=line1['line_cost'])
+    #TODO make the powerfactor a variable.
+    model.Z = Param(initialize=model.R_ref + model.X_ref * 0.5)
+    model.Z_ref = Param(initialize=model.V_ref ** 2 / Abase)
+
+    model.n_clusters = Param(initialize=n_clusters)
+    model.coe = Param(initialize=coe)
+
+
+    #####################Define variables#####################
+
+    # binary variable x[i,j]: 1 if the connection i,j is present, 0 otherwise
+    model.x = Var(model.links_decision, within=Binary)
+    # power[i,j] is the power flow of connection i-j
+    model.P = Var(model.links)
+    # positive variables E(i) is p.u. voltage at each node
+    model.E = Var(model.N, within=NonNegativeReals)
+
+    # binary variable k[i]: 1 if node i is a primary substation, 0 otherwise
+    model.k = Var(model.N_PS, within=Binary)
+    # Power output of Primary substation
+    model.PPS = Var(model.N_PS, within=NonNegativeReals)
+
+    if mg_option:# microgrid
+        model.N_MG = Set()
+        data.load(filename='microgrids_nodes.csv', set=model.N_MG)
+        model.MG_output = Var(model.N_MG)
+        model.microgrid_power = Param(model.N_MG)
+        data.load(filename='microgrids_powers.csv', param=model.microgrid_power)
+        model.z = Var(model.N_MG, within=Binary)
+        model.energy = Param(model.N_MG)
+        data.load(filename='energy.csv', param=model.energy)
+        # TODO also calculate npv
+        model.mg_cost = Param(model.N_MG)
+        data.load(filename='microgrids_costs.csv', param=model.mg_cost)
+    #####################Define constraints###############################
+    # def Make_problem_easy(model,i,j):
+    #    return model.x[i,j]+model.weights[i,j]>=1
+    # model.easy = Constraint(model.links, rule=Make_problem_easy)
+
+    def Radiality_rule(model):
+        # return summation(model.x)==len(model.N)-summation(model.k)
+        return summation(model.x) == model.n_clusters
+
+    model.Radiality = Constraint(rule=Radiality_rule)
+
+    def Power_flow_conservation_rule(model, node):
+        return (sum(model.P[j, node] for j in model.NodesIn[node]) - sum(
+            model.P[node, j] for j in model.NodesOut[node])) == model.Psub[node]
+
+    model.Power_flow_conservation = Constraint(model.N_clusters, rule=Power_flow_conservation_rule)
+
+    def Power_flow_conservation_rule2(model, node):
+        return (sum(model.P[j, node] for j in model.NodesIn[node]) - sum(
+            model.P[node, j] for j in model.NodesOut[node])) == - model.MG_output[node]
+
+
+
+    def Power_flow_conservation_rule3(model, node):
+        return (sum(model.P[j, node] for j in model.NodesIn[node]) - sum(
+            model.P[node, j] for j in model.NodesOut[node])) == - model.PPS[node]
+
+    model.Power_flow_conservation3 = Constraint(model.N_PS, rule=Power_flow_conservation_rule3)
+
+    def Power_upper_decision(model, i, j):
+        return model.P[i, j] <= model.P_max * model.x[i, j]
+
+    model.Power_upper_decision = Constraint(model.links_decision, rule=Power_upper_decision)
+
+    def Power_lower_decision(model, i, j):
+        return model.P[i, j] >= -model.P_max * model.x[i, j]
+
+    model.Power_lower_decision = Constraint(model.links_decision, rule=Power_lower_decision)
+
+    def Power_upper_clusters(model, i, j):
+        return model.P[i, j] <= model.P_max
+
+    model.Power_upper_clusters = Constraint(model.links_clusters, rule=Power_upper_clusters)
+
+    def Power_lower_clusters(model, i, j):
+        return model.P[i, j] >= -model.P_max
+
+    model.Power_lower_clusters = Constraint(model.links_clusters, rule=Power_lower_clusters)
+
+    # Voltage constraints
+    def Voltage_balance_rule(model, i, j):
+        return (model.E[i] - model.E[j]) + model.x[i, j] - 1 <= model.dist[i, j] / 1000 * model.P[
+            i, j] * model.Z / model.Z_ref
+
+    model.Voltage_balance_rule = Constraint(model.links_decision, rule=Voltage_balance_rule)
+
+    def Voltage_balance_rule2(model, i, j):
+        return (model.E[i] - model.E[j]) - model.x[i, j] + 1 >= model.dist[i, j] / 1000 * model.P[
+            i, j] * model.Z / model.Z_ref
+
+    model.Voltage_balance_rule2 = Constraint(model.links_decision, rule=Voltage_balance_rule2)
+
+    def Voltage_balance_rule3(model, i, j):
+        return (model.E[i] - model.E[j]) <= model.dist[i, j] / 1000 * model.P[i, j] * model.Z / model.Z_ref
+
+    model.Voltage_balance_rule3 = Constraint(model.links_clusters, rule=Voltage_balance_rule3)
+
+    def Voltage_balance_rule4(model, i, j):
+        return (model.E[i] - model.E[j]) >= model.dist[i, j] / 1000 * model.P[i, j] * model.Z / model.Z_ref
+
+    model.Voltage_balance_rule4 = Constraint(model.links_clusters, rule=Voltage_balance_rule4)
+
+    def Voltage_limit(model, i):
+        return model.E[i] >= model.k[i] * (model.PS_voltage[i] - model.E_min) + model.E_min
+
+    model.Voltage_limit = Constraint(model.N_PS, rule=Voltage_limit)
+
+    def Voltage_PS2(model, i):
+        return model.E[i] <= model.PS_voltage[i]
+
+    model.Voltage_PS2 = Constraint(model.N_PS, rule=Voltage_PS2)
+
+    def Voltage_limit_MG(model, i):
+        return model.E[i] <= 1
+
+
+
+    def Voltage_limit_MG2(model, i):
+        return model.E[i] >= model.z[i] * (1 - model.E_min) + model.E_min
+
+
+
+
+    def Voltage_limit_clusters2(model, i):
+        return model.E[i] >= model.E_min
+
+    model.Voltage_limit_clusters2 = Constraint(model.N_clusters, rule=Voltage_limit_clusters2)
+
+    def PS_power_rule_upper(model, i):
+        return model.PPS[i] <= model.PSmax[i] * model.k[i]
+
+    model.PS_power_upper = Constraint(model.N_PS, rule=PS_power_rule_upper)
+
+
+    def MG_power_limit(model, i):
+        return model.MG_output[i] == model.z[i] * model.microgrid_power[i]
+
+
+
+    if mg_option:
+        model.MG_power_limit = Constraint(model.N_MG, rule=MG_power_limit)
+        model.Voltage_limit_MG2 = Constraint(model.N_MG, rule=Voltage_limit_MG2)
+        model.Voltage_limit_MG = Constraint(model.N_MG, rule=Voltage_limit_MG)
+        model.Power_flow_conservation2 = Constraint(model.N_MG, rule=Power_flow_conservation_rule2)
+
+        def Balance_rule(model):
+            return (sum(model.PPS[i] for i in model.N_PS) + sum(model.MG_output[i] for i in model.N_MG) - sum(
+                model.Psub[i] for i in model.N_clusters)) == 0
+
+        model.Balance = Constraint(rule=Balance_rule)
+        def ObjectiveFunction(model):
+            # model.weights is in euro, model.coe is euro/MWh,
+            return summation(model.weights, model.x) * model.cf / 10000 + summation(model.mg_cost, model.z) * 1000 + \
+                   sum(model.energy[i] * (1 - model.z[i]) for i in model.N_MG) * model.coe + summation(model.ps_cost,
+                                                                                                       model.k)
+    else:
+        def Balance_rule(model):
+            return (sum(model.PPS[i] for i in model.N_PS)  - sum(
+                model.Psub[i] for i in model.N_clusters)) == 0
+
+        model.Balance = Constraint(rule=Balance_rule)
+
+        def ObjectiveFunction(model):
+            # model.weights is in euro, model.coe is euro/MWh,
+            return summation(model.weights, model.x) * model.cf / 10000  + summation(model.ps_cost, model.k)
+
+
+        # +sum((model.P[i]/model.A_ref)**2*0.5*1.25*model.R_ref/model.Z_ref*model.dist[i]/1000*24*365*20 for i in model.links)
+        # return summation(model.dist,model.x)*model.cf/1000 + summation(model.k) *model.cPS
+
+    model.Obj = Objective(rule=ObjectiveFunction, sense=minimize)
+
+    #############Solve model##################
+
+    instance = model.create_instance(data)
+    print('Instance is constructed:', instance.is_constructed())
+    # opt = SolverFactory('cbc',executable=r'C:\Users\Asus\Desktop\POLIMI\Thesis\GISELE\Gisele_MILP\cbc')
+    opt = SolverFactory('gurobi')
+    # opt.options['numericfocus']=0
+    opt.options['mipgap'] = 0.0175
+    opt.options['presolve']=2
+    # opt.options['mipfocus'] = 3
+    print('Starting optimization process')
+    time_i = datetime.now()
+    opt.solve(instance, tee=True, symbolic_solver_labels=True)
+    time_f = datetime.now()
+    print('Time required for optimization is', time_f - time_i)
+    links = instance.x
+    power = instance.P
+    subs = instance.k
+    voltage = instance.E
+    PS = instance.PPS
+
+
+    links_clusters = instance.links_clusters
+    # voltage_drop=instance.z
+    connections_output = pd.DataFrame(columns=[['id1', 'id2', 'power']])
+    PrSubstation = pd.DataFrame(columns=[['index', 'power']])
+    all_lines = pd.DataFrame(columns=[['id1', 'id2', 'power']])
+    Voltages = pd.DataFrame(columns=[['index', 'voltage [p.u]']])
+
+    Links_Clusters = pd.DataFrame(columns=[['id1', 'id2', 'power']])
+    k = 0
+    for index in links:
+        if int(round(value(links[index]))) == 1:
+            connections_output.loc[k, 'id1'] = index[0]
+            connections_output.loc[k, 'id2'] = index[1]
+            connections_output.loc[k, 'power'] = value(power[index])
+            k = k + 1
+    k = 0
+    for index in subs:
+        if int(round(value(subs[index]))) == 1:
+            PrSubstation.loc[k, 'index'] = index
+            PrSubstation.loc[k, 'power'] = value(PS[index])
+            print(((value(PS[index]))))
+            k = k + 1
+    k = 0
+    for v in voltage:
+        Voltages.loc[k, 'index'] = v
+        Voltages.loc[k, 'voltage [p.u]'] = value(voltage[v])
+        k = k + 1
+    k = 0
+    for index in power:
+        all_lines.loc[k, 'id1'] = index[0]
+        all_lines.loc[k, 'id2'] = index[1]
+        all_lines.loc[k, 'power'] = value(power[index])
+        k = k + 1
+    k = 0
+    if mg_option:
+        mg_output = instance.MG_output
+        microGrid = instance.z
+        Microgrid = pd.DataFrame(columns=[['index', 'microgrid', 'power']])
+        for index in mg_output:
+            Microgrid.loc[k, 'index'] = index
+            Microgrid.loc[k, 'microgrid'] = value(microGrid[index])
+            Microgrid.loc[k, 'power'] = value(mg_output[index])
+            k = k + 1
+        Microgrid.to_csv(MILP_output_folder + '/Microgrid.csv', index=False)
+    k = 0
+    for index in links_clusters:
+        Links_Clusters.loc[k, 'id1'] = index[0]
+        Links_Clusters.loc[k, 'id2'] = index[1]
+        Links_Clusters.loc[k, 'power'] = value(power[index])
+        k = k + 1
+
+    Links_Clusters.to_csv(MILP_output_folder + '/links_clusters.csv', index=False)
+    connections_output.to_csv(MILP_output_folder + '/connections_output.csv', index=False)
+    PrSubstation.to_csv(MILP_output_folder + '/PrimarySubstations.csv', index=False)
+    Voltages.to_csv(MILP_output_folder + '/Voltages.csv', index=False)
+    all_lines.to_csv(MILP_output_folder + '/all_lines.csv', index=False)
+
+    print('There are ' + str(int(Microgrid.iloc[:,1].sum()))+' microgrids selected. ')
+    # k=0
+    # for index in links:
+    #     if int(round(value(links[index])))==1:
+    #         Voltage_drop.loc[k,'id1']=index[0]
+    #         Voltage_drop.loc[k,'id2']=index[1]
+    #         Voltage_drop.loc[k,'v_drop']=value(voltage_drop[index])
+    #         k=k+1
+    # Voltage_drop.to_csv('MILP_results/solution_new/Voltage_drops.csv',index=False)
